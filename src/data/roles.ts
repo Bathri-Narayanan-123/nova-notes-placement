@@ -1,0 +1,88 @@
+import { PlacementRole } from '../types';
+
+export const PLACEMENT_ROLES: PlacementRole[] = [
+  {
+    id: 'python-dev',
+    title: 'Python Developer',
+    description: 'Build applications using Python, OOP, and databases.',
+    skills: ['Python', 'OOP', 'DSA', 'SQL', 'Problem Solving'],
+    icon: 'Code',
+    color: 'emerald',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+  {
+    id: 'data-analyst',
+    title: 'Data Analyst',
+    description: 'Analyze data pipelines, transform data with Pandas & SQL, and extract insights.',
+    skills: ['SQL', 'Python', 'Pandas', 'Statistics', 'EDA', 'Data Cleaning', 'Data Visualization'],
+    icon: 'BarChart3',
+    color: 'sky',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+  {
+    id: 'ml-engineer',
+    title: 'ML Engineer',
+    description: 'Design machine learning architectures, statistical models, and ML pipelines.',
+    skills: ['Python', 'Statistics', 'Probability', 'Machine Learning', 'Classification', 'Feature Engineering'],
+    icon: 'Brain',
+    color: 'indigo',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+  {
+    id: 'ai-engineer',
+    title: 'AI Engineer',
+    description: 'Build agentic workflows, LLM applications, embeddings, and RAG systems.',
+    skills: ['Python', 'LLMs', 'Prompt Engineering', 'Vector DBs', 'System Integration', 'APIs'],
+    icon: 'Sparkles',
+    color: 'purple',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+  {
+    id: 'full-stack-dev',
+    title: 'Full Stack Developer',
+    description: 'Develop responsive client interfaces, RESTful services, and database schemas.',
+    skills: ['TypeScript', 'React', 'Node.js', 'SQL', 'System Design', 'Algorithms'],
+    icon: 'Layers',
+    color: 'blue',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+  {
+    id: 'data-engineer',
+    title: 'Data Engineer',
+    description: 'Architect scalable data warehouses, ETL workflows, and distributed pipelines.',
+    skills: ['SQL', 'Python', 'ETL Pipelines', 'Data Warehousing', 'Distributed Systems'],
+    icon: 'Database',
+    color: 'teal',
+    defaultComposition: {
+      mcq: 20,
+      msq: 0,
+      output: 5,
+      coding: 5,
+    },
+  },
+];
