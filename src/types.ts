@@ -115,6 +115,7 @@ export interface InterviewEvaluation {
   communicationScore: number;
   relevanceScore: number;
   clarityConfidenceScore: number;
+  problemSolvingScore?: number;
   strengths: string[];
   weaknesses: string[];
   suggestions: string[];
@@ -127,8 +128,10 @@ export interface InterviewAttempt {
   studentId: string;
   role: string;
   date: string;
+  score?: number;
   status: 'completed' | 'abandoned';
-  messages: any[];
+  messages?: any[];
+  transcript?: any[];
   evaluation?: InterviewEvaluation;
   isDirectTest?: boolean;
 }

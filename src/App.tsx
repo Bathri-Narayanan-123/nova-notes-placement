@@ -10,13 +10,31 @@ import { ProgressView } from './components/ProgressView';
 import { ProfileView } from './components/ProfileView';
 import { AdminPortal } from './components/AdminPortal';
 import { LoginView } from './components/LoginView';
+import { AdminLoginView } from './components/AdminLoginView';
 import { SupabaseGuideModal } from './components/SupabaseGuideModal';
 import { db } from './services/db';
 import { AssessmentAttempt, PlacementRole, UserProfile } from './types';
 import { Menu, X, BookOpen, Database } from 'lucide-react';
 
+function checkIsAdminRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const search = window.location.search.toLowerCase();
+  return (
+    path === '/admin' ||
+    path === '/admin/login' ||
+    path.startsWith('/admin') ||
+    hash === '#admin' ||
+    hash === '#admin/login' ||
+    search.includes('portal=admin') ||
+    search.includes('admin=true')
+  );
+}
+
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdminPath, setIsAdminPath] = useState(checkIsAdminRoute);
   const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as NavTab;
@@ -45,6 +63,7 @@ function AppContent() {
   // Browser Back / Forward navigation listener
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
+      setIsAdminPath(checkIsAdminRoute());
       const hash = (window.location.hash.replace('#', '') || (event.state?.tab)) as NavTab;
       const validTabs: NavTab[] = ['dashboard', 'placement', 'practice', 'assessment', 'interview', 'progress', 'profile'];
       if (validTabs.includes(hash)) {
@@ -74,7 +93,33 @@ function AppContent() {
   const handleLoginSuccess = (userProfile: UserProfile, targetRole: 'student' | 'admin') => {
     setProfile(userProfile);
     setIsAuthenticated(true);
-    setActiveTab('dashboard');
+    if (targetRole === 'admin' || userProfile.role === 'admin') {
+      setIsAdminPath(true);
+      if (typeof window !== 'undefined') {
+        window.location.hash = '#admin';
+      }
+    } else {
+      setIsAdminPath(false);
+      setActiveTab('dashboard');
+    }
+  };
+
+  const handleAdminLoginSuccess = (userProfile: UserProfile) => {
+    setProfile(userProfile);
+    setIsAuthenticated(true);
+    setIsAdminPath(true);
+  };
+
+  const handleReturnToStudent = () => {
+    setIsAdminPath(false);
+    if (typeof window !== 'undefined') {
+      if (window.location.hash.startsWith('#admin')) {
+        window.location.hash = '#dashboard';
+      }
+      if (window.location.pathname.startsWith('/admin')) {
+        window.history.pushState({}, '', '/');
+      }
+    }
   };
 
   const handleStartAssessment = (isAdaptive: boolean = false) => {
@@ -84,10 +129,44 @@ function AppContent() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    db.updateProfile({ role: 'student' });
     setActiveTab('dashboard');
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/admin')) {
+        window.history.pushState({}, '', '/');
+        setIsAdminPath(false);
+      }
+    }
   };
 
-  // 1. If not authenticated, always display Login/Welcome page first
+  // 1. If Route is an Administrator Route (/admin or /admin/login or #admin)
+  if (isAdminPath) {
+    if (isAuthenticated && profile.role === 'admin') {
+      return (
+        <>
+          <AdminPortal
+            profile={profile}
+            roles={roles}
+            attempts={attempts}
+            onLogout={handleLogout}
+          />
+          <SupabaseGuideModal
+            isOpen={showSetupGuide}
+            onClose={() => setShowSetupGuide(false)}
+          />
+        </>
+      );
+    }
+    // Not authenticated or not admin -> Show dedicated AdminLoginView
+    return (
+      <AdminLoginView
+        onLoginSuccess={handleAdminLoginSuccess}
+        onReturnToStudent={handleReturnToStudent}
+      />
+    );
+  }
+
+  // 2. Public Student Portal - If not authenticated, display clean student LoginView
   if (!isAuthenticated) {
     return (
       <>
@@ -103,7 +182,7 @@ function AppContent() {
     );
   }
 
-  // 2. If authenticated as ADMIN, render the dedicated Admin Portal directly
+  // 3. If authenticated as ADMIN (even from another route), render the dedicated Admin Portal directly
   if (profile.role === 'admin') {
     return (
       <>
@@ -121,7 +200,7 @@ function AppContent() {
     );
   }
 
-  // 3. Authenticated as STUDENT - Render Student Dashboard & Experience
+  // 4. Authenticated as STUDENT - Render Student Dashboard & Experience
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#070c17] text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors duration-200">
       {/* Desktop Sidebar */}

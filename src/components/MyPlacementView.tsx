@@ -178,13 +178,13 @@ export const MyPlacementView: React.FC<MyPlacementViewProps> = ({
               {latestAttempt ? 'Start Adaptive Reattempt' : 'Start Assessment'}
             </button>
             <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-              20 MCQ · 5 Pseudocode · 5 Coding · 30 Questions
+              10 Role MCQ · 8 DSA · 10 Aptitude · 7 Output · 4 Coding (39 Questions)
             </p>
           </div>
         </div>
       </div>
 
-      {/* Bottom Section: AI HR Interview Card (Page 2) */}
+      {/* Bottom Section: Mock HR & Technical Interview Card */}
       <div 
         id="placement-interview-card"
         className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4"
@@ -193,7 +193,7 @@ export const MyPlacementView: React.FC<MyPlacementViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                AI HR Interview
+                Mock HR &amp; Technical Interview
               </h3>
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
                 isInterviewLocked

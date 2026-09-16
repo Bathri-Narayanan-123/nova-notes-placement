@@ -249,6 +249,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <InterviewView
               profile={profile}
               setActiveTab={(tab: any) => setTestingStudentFeature(tab)}
+              isAdminTesting={true}
             />
           )}
 
@@ -668,27 +669,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
           {/* ==================== 5. ASSESSMENTS MANAGEMENT ==================== */}
           {activeSection === 'assessments' && (
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6 max-w-2xl">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                Assessment Configuration &amp; Structure
-              </h3>
-              <p className="text-xs text-slate-400">
-                Configure diagnostic assessments. The placement diagnostic assessment contains 30 questions (20 MCQ, 5 Pseudocode, 5 Coding) with a 30-minute time limit.
-              </p>
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6 max-w-4xl">
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  Assessment Configuration &amp; Structure
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Configure diagnostic assessments. The placement diagnostic assessment contains exactly 39 questions (10 Role MCQs, 8 DSA, 10 Aptitude, 7 Pseudocode, 4 Coding) with a 30-minute time limit.
+                </p>
+              </div>
 
               <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <span className="text-slate-400 block mb-1">Total MCQs</span>
-                    <strong className="text-base text-slate-900 dark:text-white">20 Questions</strong>
+                    <span className="text-slate-400 block mb-1">Core MCQs</span>
+                    <strong className="text-base text-slate-900 dark:text-white">10 Questions</strong>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
+                    <span className="text-blue-600 dark:text-blue-400 block mb-1">DSA Track</span>
+                    <strong className="text-base text-blue-700 dark:text-blue-300">8 Questions</strong>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <span className="text-slate-400 block mb-1">Aptitude</span>
+                    <strong className="text-base text-slate-900 dark:text-white">10 Questions</strong>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                     <span className="text-slate-400 block mb-1">Pseudocode</span>
-                    <strong className="text-base text-slate-900 dark:text-white">5 Questions</strong>
+                    <strong className="text-base text-slate-900 dark:text-white">7 Questions</strong>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 col-span-2 sm:col-span-1">
                     <span className="text-slate-400 block mb-1">Coding</span>
-                    <strong className="text-base text-slate-900 dark:text-white">5 Questions</strong>
+                    <strong className="text-base text-slate-900 dark:text-white">4 Questions</strong>
                   </div>
                 </div>
 
@@ -702,11 +713,57 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     max={95}
                     value={config.qualificationThreshold}
                     onChange={(e) => handleUpdatePassMark(parseInt(e.target.value) || 70)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold max-w-xs"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Score required on the 30-question diagnostic assessment to unlock the official placement interview.
+                    Score required on the 39-question diagnostic assessment (minimum 70%) to unlock the official placement interview.
                   </p>
+                </div>
+
+                {/* Candidate Assessment Attempts Log */}
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Candidate Assessment Attempts</h4>
+                  {attempts.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No candidate assessment attempts recorded yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px]">
+                          <tr>
+                            <th className="py-2.5 px-3">Date</th>
+                            <th className="py-2.5 px-3">Role</th>
+                            <th className="py-2.5 px-3">Score</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3">MCQ / Apt / Pseudo / Code</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {attempts.map((att) => {
+                            const isPassed = att.score >= config.qualificationThreshold;
+                            return (
+                              <tr key={att.id}>
+                                <td className="py-2.5 px-3 text-slate-500 font-mono">{att.date}</td>
+                                <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200">{att.role}</td>
+                                <td className="py-2.5 px-3 font-bold">{att.score}%</td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                    isPassed 
+                                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                  }`}>
+                                    {isPassed ? 'Qualified' : 'Retake Required'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
+                                  {att.sectionScores?.mcq ?? att.mcqScore ?? '-'}% / {att.sectionScores?.aptitude ?? '-'}% / {att.sectionScores?.pseudocode ?? att.pseudocodeScore ?? '-'}% / {att.sectionScores?.coding ?? att.codingScore ?? '-'}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -715,12 +772,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {/* ==================== 6. INTERVIEWS MANAGEMENT ==================== */}
           {activeSection === 'interviews' && (
             <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6 max-w-2xl">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                Interview Rounds &amp; AI Rubric
-              </h3>
-              <p className="text-xs text-slate-400">
-                The platform includes 5 structured interview rounds evaluated across Technical Accuracy, Communication, and Problem Solving.
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    Interview Rounds &amp; Placement Rubric
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    The platform includes 5 structured interview rounds evaluated across Technical Accuracy, Communication, and Problem Solving.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTestingStudentFeature('interview')}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Test Mock Interview</span>
+                </button>
+              </div>
 
               <div className="space-y-2 text-xs">
                 {[
@@ -872,22 +940,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </button>
                 </div>
 
-                {/* 4. AI Placement Interview */}
+                {/* 4. Mock Placement Interview */}
                 <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between shadow-xs">
                   <div className="space-y-1.5">
                     <div className="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-950 text-pink-600 flex items-center justify-center">
                       <MessageSquare className="w-4 h-4" />
                     </div>
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">AI Speech Interview</h4>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Speech Interview</h4>
                     <p className="text-xs text-slate-400">
-                      Test real-time AI speech synthesis, speech recognition, and 5-round evaluation rubric.
+                      Test real-time speech synthesis, audio recording, and 5-round evaluation rubric.
                     </p>
                   </div>
                   <button
                     onClick={() => setTestingStudentFeature('interview')}
                     className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <span>Launch AI Interview</span>
+                    <span>Launch Interview</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

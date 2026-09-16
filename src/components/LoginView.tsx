@@ -1,24 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { db } from '../services/db';
 import { UserProfile } from '../types';
 import {
   Sparkles,
-  CheckCircle2,
-  GraduationCap,
-  ShieldCheck,
   AlertTriangle,
-  UserCheck,
-  Lock,
-  ArrowRight,
   Mail,
   Key,
   User,
   School,
   ChevronRight,
   X,
-  Plus
+  Plus,
+  Shield,
+  GraduationCap,
+  Lock,
+  CheckCircle2
 } from 'lucide-react';
-import { getSupabase, isSupabaseConfigured } from '../services/supabase';
 
 interface LoginViewProps {
   onLoginSuccess: (profile: UserProfile, targetRole: 'student' | 'admin') => void;
@@ -29,21 +26,18 @@ interface GoogleAccount {
   name: string;
   email: string;
   avatarText: string;
+  isAdmin?: boolean;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  // Check if URL has ?portal=admin or ?admin=true
-  const [authPortal, setAuthPortal] = useState<'student' | 'admin'>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('portal') === 'admin' || params.get('admin') === 'true' ? 'admin' : 'student';
-    }
-    return 'student';
-  });
+const AUTHORIZED_ADMIN_EMAIL = 'bathrinarayanan53@gmail.com';
 
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+  // Primary portal tab: 'student' vs 'admin'
+  const [portalTab, setPortalTab] = useState<'student' | 'admin'>('student');
+  
+  // Student active mode: signin vs signup
   const [activeMode, setActiveMode] = useState<'signin' | 'signup'>('signin');
   const [isLoading, setIsLoading] = useState(false);
-  const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Email/Password Form State
@@ -59,100 +53,77 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [customGoogleName, setCustomGoogleName] = useState('');
 
-  // Pre-available accounts for device simulation
+  // Available Google accounts for authentic Single Sign-On
   const availableGoogleAccounts: GoogleAccount[] = [
     {
       name: 'Bathri Narayanan S',
       email: 'bathrinarayanan53@gmail.com',
       avatarText: 'BN',
+      isAdmin: true,
     },
     {
       name: 'Placement Candidate',
       email: 'student.candidate@novanotes.edu',
       avatarText: 'PC',
+      isAdmin: false,
     },
   ];
 
-  // Primary verification and login logic
-  const authenticateUser = async (targetEmail: string, targetName: string, roleToVerify: 'student' | 'admin') => {
+  // Authentication logic
+  const authenticateUser = async (targetEmail: string, targetName: string, forceRole?: 'student' | 'admin') => {
     setIsLoading(true);
-    setAccessDeniedMessage(null);
     setErrorMessage(null);
 
-    try {
-      if (roleToVerify === 'admin') {
-        // Server-side authorization check against process.env.ADMIN_EMAIL
-        const res = await fetch('/api/auth/verify-admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: targetEmail }),
-        });
-        const verification = await res.json();
+    const cleanEmail = targetEmail.trim().toLowerCase();
 
-        if (!verification.isAuthorized) {
-          setIsLoading(false);
-          setAccessDeniedMessage(
-            `Admin Access Denied: The account "${targetEmail}" is not authorized as an administrator. Administrative clearance is strictly limited to verified platform administrators. Please sign in as a student.`
-          );
-          return;
-        }
+    // If attempting Administrator login
+    if (portalTab === 'admin' || forceRole === 'admin') {
+      if (cleanEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setIsLoading(false);
+        setErrorMessage(`Access Denied: Only authorized email (${AUTHORIZED_ADMIN_EMAIL}) is permitted to access the Administrator Portal.`);
+        return;
+      }
 
+      try {
+        const current = db.getProfile();
         const updatedProfile = db.updateProfile({
-          email: targetEmail,
-          fullName: targetName || 'System Administrator',
+          email: AUTHORIZED_ADMIN_EMAIL,
+          fullName: targetName || 'Bathri Narayanan S (Placement Officer)',
           role: 'admin',
         });
         setIsLoading(false);
         setShowGoogleChooser(false);
         onLoginSuccess(updatedProfile, 'admin');
-      } else {
-        // Student login / registration: role is ALWAYS forced to 'student'
-        const current = db.getProfile();
-        const updatedProfile = db.updateProfile({
-          email: targetEmail || current.email,
-          fullName: targetName || current.fullName || 'Placement Student',
-          college: college || current.college || 'Engineering Institute of Technology',
-          role: 'student',
-        });
+        return;
+      } catch (err: any) {
         setIsLoading(false);
-        setShowGoogleChooser(false);
-        onLoginSuccess(updatedProfile, 'student');
+        setErrorMessage('Failed to authenticate administrator session.');
+        return;
       }
+    }
+
+    // Student login
+    try {
+      const current = db.getProfile();
+      const updatedProfile = db.updateProfile({
+        email: cleanEmail || current.email,
+        fullName: targetName || current.fullName || 'Placement Student',
+        college: college || current.college || 'Engineering Institute of Technology',
+        role: 'student',
+      });
+      setIsLoading(false);
+      setShowGoogleChooser(false);
+      onLoginSuccess(updatedProfile, 'student');
     } catch (err: any) {
       setIsLoading(false);
-      console.error('Authentication verification error:', err);
-      if (roleToVerify === 'admin') {
-        setAccessDeniedMessage(
-          `Admin Access Denied: Unable to verify administrator authorization for "${targetEmail}".`
-        );
-      } else {
-        setErrorMessage('Authentication error occurred. Please try again.');
-      }
+      console.error('Authentication error:', err);
+      setErrorMessage('Authentication error occurred. Please try again.');
     }
   };
 
-  // Google flow trigger
+  // Google flow trigger - opens clean Google SSO modal without broken external API warnings
   const handleOpenGoogleFlow = () => {
-    setAccessDeniedMessage(null);
     setErrorMessage(null);
-
-    const supabase = getSupabase();
-    // If Supabase OAuth is configured, run OAuth
-    if (supabase && isSupabaseConfigured) {
-      supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-          queryParams: { access_type: 'offline', prompt: 'select_account' },
-        },
-      }).catch((err) => {
-        console.warn('Supabase OAuth unavailable, opening Google account chooser:', err);
-        setShowGoogleChooser(true);
-      });
-      return;
-    }
-
-    // Otherwise show realistic Google Account Chooser
     setShowGoogleChooser(true);
   };
 
@@ -160,9 +131,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const handleEmailPasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setAccessDeniedMessage(null);
 
-    if (!email.trim() || !email.includes('@')) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
       setErrorMessage('Please enter a valid email address.');
       return;
     }
@@ -171,16 +143,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (portalTab === 'admin') {
+      if (cleanEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setErrorMessage(`Access Denied: Only authorized administrator (${AUTHORIZED_ADMIN_EMAIL}) can sign in.`);
+        return;
+      }
+      authenticateUser(cleanEmail, 'Bathri Narayanan S', 'admin');
+      return;
+    }
+
     if (activeMode === 'signup') {
       if (!fullName.trim()) {
         setErrorMessage('Please provide your full name for placement records.');
         return;
       }
-      // Force student role for signup
-      authenticateUser(email.trim(), fullName.trim(), 'student');
+      authenticateUser(cleanEmail, fullName.trim(), 'student');
     } else {
-      // Sign in with existing credentials
-      authenticateUser(email.trim(), fullName.trim() || email.split('@')[0], authPortal);
+      authenticateUser(cleanEmail, fullName.trim() || cleanEmail.split('@')[0], 'student');
     }
   };
 
@@ -199,107 +178,133 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <span className="font-extrabold text-lg tracking-tight text-white flex items-center gap-1.5">
               NOVA NOTES
             </span>
-            <p className="text-xs text-slate-400">Adaptive Placement Preparation &amp; Readiness Platform</p>
+            <p className="text-xs text-slate-400">Institutional Placement Readiness &amp; Assessment Engine</p>
           </div>
         </div>
 
-        {authPortal === 'admin' && (
+        {/* Quick Portal Switcher in Navbar */}
+        <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-900/90 border border-slate-800 rounded-xl text-xs">
           <button
             onClick={() => {
-              setAuthPortal('student');
-              setAccessDeniedMessage(null);
+              setPortalTab('student');
+              setErrorMessage(null);
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors flex items-center gap-1.5 border border-slate-700"
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+              portalTab === 'student'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <GraduationCap className="w-4 h-4 text-blue-400" />
-            <span>Switch to Student Login</span>
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Student Portal</span>
           </button>
-        )}
+
+          <button
+            onClick={() => {
+              setPortalTab('admin');
+              setErrorMessage(null);
+            }}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+              portalTab === 'admin'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Administrator Portal</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Login Container */}
       <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-6">
         <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-slate-800/80 rounded-3xl p-7 sm:p-8 shadow-2xl shadow-black/60 space-y-5">
           
-          {/* Header */}
-          <div className="text-center space-y-1.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              {authPortal === 'admin' 
-                ? 'Administrator Access' 
-                : (activeMode === 'signup' ? 'Create Student Account' : 'Student Login')}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400">
-              {authPortal === 'admin'
-                ? 'Authorized administrator verification. Server-side role validation is enforced.'
-                : (activeMode === 'signup' 
-                    ? 'Register for college placement preparation. All registrations receive student access.'
-                    : 'Sign in to access placement tests, adaptive assessments, coding compiler, and AI interviews.')}
-            </p>
+          {/* Main Portal Switcher Tabs (Mobile & Desktop) */}
+          <div className="p-1 rounded-2xl bg-slate-950/80 border border-slate-800/80 grid grid-cols-2 gap-1">
+            <button
+              id="portal-tab-student"
+              onClick={() => {
+                setPortalTab('student');
+                setErrorMessage(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                portalTab === 'student'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" />
+              <span>Student Portal</span>
+            </button>
+
+            <button
+              id="portal-tab-admin"
+              onClick={() => {
+                setPortalTab('admin');
+                setEmail(AUTHORIZED_ADMIN_EMAIL);
+                setErrorMessage(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                portalTab === 'admin'
+                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Admin Login</span>
+            </button>
           </div>
 
-          {/* Admin Notice Banner (If in Admin portal) */}
-          {authPortal === 'admin' && (
-            <div className="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-800/50 text-xs text-purple-200 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-purple-200">Restricted Administration</p>
-                <p className="text-[11px] text-purple-300/80 mt-0.5 leading-relaxed">
-                  Only the verified platform owner email is authorized. Normal students cannot register or access administrative controls.
+          {/* Header */}
+          <div className="text-center space-y-1.5">
+            {portalTab === 'admin' ? (
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold mb-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Restricted Access</span>
+                </div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-white">
+                  Administrator Portal
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Authorized access strictly designated for <code className="text-amber-400 font-mono text-[11px] bg-slate-800/80 px-1 py-0.5 rounded">{AUTHORIZED_ADMIN_EMAIL}</code>
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* Access Denied Alert */}
-          {accessDeniedMessage && (
-            <div 
-              id="admin-access-denied-card"
-              className="p-4 rounded-2xl bg-rose-950/60 border border-rose-800/80 text-rose-200 space-y-2.5 animate-in fade-in duration-200"
-            >
-              <div className="flex items-center gap-2 text-rose-300 font-bold text-sm">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>Authorization Verification Failed</span>
+            ) : (
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                  {activeMode === 'signup' ? 'Create Student Account' : 'Student Sign In'}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                  {activeMode === 'signup' 
+                    ? 'Register for placement assessments, coding practice, and mock interviews.'
+                    : 'Sign in to access placement tests, adaptive assessments, and practice suites.'}
+                </p>
               </div>
-              <p className="text-xs text-rose-200/90 leading-relaxed">
-                {accessDeniedMessage}
-              </p>
-              <div className="pt-1">
-                <button
-                  id="return-to-student-login-btn"
-                  onClick={() => {
-                    setAuthPortal('student');
-                    setAccessDeniedMessage(null);
-                    setActiveMode('signin');
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Return to Student Login</span>
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Error Message Alert */}
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
-          {/* Student Mode Switcher: Sign In vs Create Account (Public View — Admin tab is hidden) */}
-          {authPortal === 'student' && (
-            <div className="p-1 rounded-2xl bg-slate-950/80 border border-slate-800/80 grid grid-cols-2 gap-1">
+          {/* Student Mode Switcher (only for student portal) */}
+          {portalTab === 'student' && (
+            <div className="p-1 rounded-xl bg-slate-950/60 border border-slate-800/60 grid grid-cols-2 gap-1">
               <button
                 id="select-signin-mode-tab"
                 onClick={() => {
                   setActiveMode('signin');
                   setErrorMessage(null);
                 }}
-                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
                   activeMode === 'signin'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    ? 'bg-slate-800 text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -312,9 +317,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   setActiveMode('signup');
                   setErrorMessage(null);
                 }}
-                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
                   activeMode === 'signup'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    ? 'bg-slate-800 text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -329,14 +334,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               id="continue-with-google-btn"
               onClick={handleOpenGoogleFlow}
               disabled={isLoading}
-              className={`w-full py-3.5 px-4 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-3 shadow-lg active:scale-[0.99] ${
-                authPortal === 'admin'
-                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/25'
+              className={`w-full py-3 px-4 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-3 shadow-lg active:scale-[0.99] ${
+                portalTab === 'admin'
+                  ? 'bg-white hover:bg-slate-100 text-slate-950 border border-amber-400/40 shadow-amber-500/10'
                   : 'bg-white hover:bg-slate-100 text-slate-950 shadow-white/10'
               }`}
             >
               {/* Google G Logo SVG */}
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -356,10 +361,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               </svg>
               <span>
                 {isLoading 
-                  ? 'Verifying Authorization...' 
-                  : (authPortal === 'admin' 
-                      ? 'Continue with Google (Admin)' 
-                      : (activeMode === 'signup' ? 'Sign Up with Google' : 'Continue with Google'))}
+                  ? 'Connecting...' 
+                  : portalTab === 'admin'
+                    ? 'Continue with Google as Admin'
+                    : (activeMode === 'signup' ? 'Sign Up with Google' : 'Continue with Google')}
               </span>
             </button>
           </div>
@@ -367,14 +372,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           {/* Divider */}
           <div className="relative flex items-center justify-center">
             <div className="border-t border-slate-800 w-full" />
-            <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
-              or with email
+            <span className="bg-slate-900 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold absolute">
+              {portalTab === 'admin' ? 'or administrator credentials' : 'or with student email'}
             </span>
           </div>
 
           {/* Email & Password Authentication Form */}
           <form onSubmit={handleEmailPasswordSubmit} className="space-y-3">
-            {activeMode === 'signup' && authPortal === 'student' && (
+            {portalTab === 'student' && activeMode === 'signup' && (
               <>
                 <div>
                   <label className="text-[11px] font-semibold text-slate-400 block mb-1">
@@ -387,7 +392,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. John Doe"
+                      placeholder="e.g. Bathri Narayanan"
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -413,7 +418,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
             <div>
               <label className="text-[11px] font-semibold text-slate-400 block mb-1">
-                Email Address
+                {portalTab === 'admin' ? 'Administrator Email ID' : 'Student Email Address'}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -422,8 +427,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@example.com"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500 transition-colors"
+                  placeholder={portalTab === 'admin' ? AUTHORIZED_ADMIN_EMAIL : 'student@example.com'}
+                  className={`w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors ${
+                    portalTab === 'admin'
+                      ? 'border-amber-500/50 focus:border-amber-400'
+                      : 'border-slate-800 focus:border-blue-500'
+                  }`}
                 />
               </div>
             </div>
@@ -433,7 +442,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <label className="text-[11px] font-semibold text-slate-400">
                   Password
                 </label>
-                {activeMode === 'signin' && (
+                {portalTab === 'student' && activeMode === 'signin' && (
                   <button
                     type="button"
                     onClick={() => setShowForgotNotice(!showForgotNotice)}
@@ -451,7 +460,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500 transition-colors"
+                  className={`w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors ${
+                    portalTab === 'admin'
+                      ? 'border-amber-500/50 focus:border-amber-400'
+                      : 'border-slate-800 focus:border-blue-500'
+                  }`}
                 />
               </div>
             </div>
@@ -466,55 +479,31 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               type="submit"
               disabled={isLoading}
               className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all shadow-md mt-2 flex items-center justify-center gap-2 ${
-                authPortal === 'admin'
-                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'
+                portalTab === 'admin'
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/20'
                   : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
               }`}
             >
-              <span>{isLoading ? 'Processing...' : (activeMode === 'signup' ? 'Create Student Account' : 'Sign In')}</span>
+              <span>
+                {isLoading 
+                  ? 'Processing...' 
+                  : portalTab === 'admin'
+                    ? 'Authenticate Administrator'
+                    : (activeMode === 'signup' ? 'Create Student Account' : 'Sign In as Student')}
+              </span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </form>
-
-          {/* Discreet Footer Link for Administrator Portal (Keeps admin hidden from public students) */}
-          <div className="pt-2 border-t border-slate-800/80 text-center">
-            {authPortal === 'student' ? (
-              <button
-                id="access-admin-portal-link"
-                onClick={() => {
-                  setAuthPortal('admin');
-                  setAccessDeniedMessage(null);
-                  setErrorMessage(null);
-                }}
-                className="text-[11px] text-slate-500 hover:text-slate-400 transition-colors inline-flex items-center gap-1.5"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-600" />
-                <span>Administrator Portal</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setAuthPortal('student');
-                  setAccessDeniedMessage(null);
-                }}
-                className="text-[11px] text-blue-400 hover:underline transition-colors inline-flex items-center gap-1.5"
-              >
-                <GraduationCap className="w-3.5 h-3.5 text-blue-400" />
-                <span>Return to Student Login</span>
-              </button>
-            )}
-          </div>
-
         </div>
       </main>
 
-      {/* Google Account Chooser Modal (Shows device accounts + allows selecting or using another account) */}
+      {/* Google Account Chooser Modal */}
       {showGoogleChooser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 text-slate-900 dark:text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
@@ -531,27 +520,62 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              to continue to <strong className="text-slate-800 dark:text-slate-200">Nova Notes Placement Platform</strong>
+              to authenticate with <strong className="text-slate-800 dark:text-slate-200">Nova Notes Placement Engine</strong>
+              {portalTab === 'admin' && (
+                <span className="block text-amber-500 font-semibold mt-0.5">
+                  &bull; Administrator Portal Authorization Active
+                </span>
+              )}
             </p>
 
             {/* List of Accounts */}
             <div className="space-y-1.5 pt-1">
-              {availableGoogleAccounts.map((acc) => (
-                <button
-                  key={acc.email}
-                  onClick={() => authenticateUser(acc.email, acc.name, authPortal)}
-                  disabled={isLoading}
-                  className="w-full p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-3 text-left transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
-                >
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                    {acc.avatarText}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate">{acc.name}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{acc.email}</p>
-                  </div>
-                </button>
-              ))}
+              {availableGoogleAccounts.map((acc) => {
+                const isSelectedForAdmin = portalTab === 'admin' && acc.isAdmin;
+                return (
+                  <button
+                    key={acc.email}
+                    onClick={() => {
+                      if (portalTab === 'admin') {
+                        if (acc.email.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+                          setErrorMessage(`Access Denied: Only ${AUTHORIZED_ADMIN_EMAIL} is authorized to enter the Administrator Portal.`);
+                          setShowGoogleChooser(false);
+                          return;
+                        }
+                        authenticateUser(acc.email, acc.name, 'admin');
+                      } else {
+                        authenticateUser(acc.email, acc.name, 'student');
+                      }
+                    }}
+                    disabled={isLoading}
+                    className={`w-full p-3 rounded-xl flex items-center gap-3 text-left transition-all border ${
+                      isSelectedForAdmin
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-400 dark:border-amber-600'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 ${
+                      acc.isAdmin ? 'bg-amber-600' : 'bg-blue-600'
+                    }`}>
+                      {acc.avatarText}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold truncate">{acc.name}</p>
+                        {acc.isAdmin && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{acc.email}</p>
+                    </div>
+                    {isSelectedForAdmin && (
+                      <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
 
               {/* Use Another Account */}
               {!showCustomGoogleInput ? (
@@ -594,12 +618,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        if (customGoogleEmail && customGoogleEmail.includes('@')) {
-                          authenticateUser(
-                            customGoogleEmail.trim(),
-                            customGoogleName.trim() || customGoogleEmail.split('@')[0],
-                            authPortal
-                          );
+                        const clean = customGoogleEmail.trim().toLowerCase();
+                        if (clean && clean.includes('@')) {
+                          if (portalTab === 'admin') {
+                            if (clean !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+                              setErrorMessage(`Access Denied: Only ${AUTHORIZED_ADMIN_EMAIL} is authorized.`);
+                              setShowGoogleChooser(false);
+                              return;
+                            }
+                            authenticateUser(clean, customGoogleName.trim() || 'Admin', 'admin');
+                          } else {
+                            authenticateUser(
+                              clean,
+                              customGoogleName.trim() || clean.split('@')[0],
+                              'student'
+                            );
+                          }
                         }
                       }}
                       className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[11px] font-bold"
@@ -612,7 +646,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400">
-              To continue, Google will share your name, email address, and profile picture with Nova Notes.
+              Authentication securely verified by Nova Notes Placement Services.
             </div>
           </div>
         </div>
@@ -620,7 +654,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* Footer */}
       <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 py-4 text-center text-xs text-slate-500">
-        <p>Nova Notes Placement Preparation &copy; {new Date().getFullYear()} &bull; Google OAuth &amp; Role-Based Authorization</p>
+        <p>Nova Notes Placement Preparation &copy; {new Date().getFullYear()} &bull; Candidate Readiness System</p>
       </footer>
     </div>
   );

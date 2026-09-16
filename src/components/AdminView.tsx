@@ -449,8 +449,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ profile, roles, setActiveT
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white">Direct AI Interview</h4>
-                <p className="text-[11px] text-slate-400">Test AI HR mock interview voice/chat independently.</p>
+                <h4 className="font-bold text-xs text-slate-900 dark:text-white">Direct Mock Interview</h4>
+                <p className="text-[11px] text-slate-400">Test HR mock interview voice/chat independently.</p>
                 <button
                   onClick={() => setActiveTab('interview')}
                   className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
@@ -495,7 +495,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ profile, roles, setActiveT
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Students scoring above this pass mark qualify and unlock the AI HR Interview.
+                Students scoring above this pass mark qualify and unlock the Mock Interview.
               </p>
             </div>
           </div>

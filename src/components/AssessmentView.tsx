@@ -149,6 +149,7 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
 
     // Calculate score
     let mcqScore = 0;
+    let aptitudeScore = 0;
     let pseudoScore = 0;
     let codingScore = 0;
     let correctCount = 0;
@@ -165,23 +166,28 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
       const userAns = userAnswers[q.id] || codingDrafts[q.id] || '';
       let isCorrect = false;
 
-      if (q.type === 'MCQ' || q.type === 'MSQ') {
+      if (q.type === 'MCQ' || q.type === 'MSQ' || (q as any).type === 'DSA') {
         if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase()) {
-          mcqScore += 1; // 20 MCQs = 20 points
+          mcqScore += 1;
+          isCorrect = true;
+        }
+      } else if (q.type === 'APTITUDE') {
+        if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase()) {
+          aptitudeScore += 1; // 10 Aptitudes = 10 points
           isCorrect = true;
         }
       } else if (q.type === 'PSEUDOCODE') {
         if (
-          userAns.trim() === (q.expectedOutput || '').trim() ||
-          userAns.trim().toLowerCase() === (q.correctAnswer || '').trim().toLowerCase()
+          userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase() ||
+          userAns.trim().toLowerCase() === (q.expectedOutput || '').trim().toLowerCase()
         ) {
-          pseudoScore += 2; // 5 Pseudocode * 2 = 10 points
+          pseudoScore += 1; // 10 Pseudocode * 1 = 10 points
           isCorrect = true;
         }
       } else if (q.type === 'CODING') {
         // Evaluate code submission
         if (userAns && userAns.trim().length > 25) {
-          codingScore += 4; // 5 Coding * 4 = 20 points
+          codingScore += 1; // 4 Coding * 1 = 4 points
           isCorrect = true;
         }
       }
@@ -192,9 +198,9 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
       }
     });
 
-    // Total points possible = 20 + 10 + 20 = 50. Total percentage = (earned / 50) * 100
-    const totalEarnedPoints = mcqScore + pseudoScore + codingScore;
-    const finalScore = Math.round((totalEarnedPoints / 50) * 100);
+    // Total 39 questions (15 MCQ + 10 Aptitude + 10 Pseudocode + 4 Coding)
+    const totalQCount = questions.length || 39;
+    const finalScore = Math.round((correctCount / totalQCount) * 100);
     const isQualified = finalScore >= config.qualificationThreshold;
 
     // Identify weak & strong topics
@@ -219,6 +225,7 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
       score: finalScore,
       isQualified,
       mcqScore,
+      aptitudeScore,
       pseudoScore,
       codingScore,
       totalQuestions: questions.length,
@@ -291,26 +298,30 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
 
           {/* Adaptive Notification */}
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            20 MCQ, 5 Output, 5 Coding adaptive reattempt focuses on your weak topics: <b className="text-slate-800 dark:text-slate-200">{profile.needsImprovement.join(', ')}</b>.
+            10 Technical MCQ, 8 Data Structures &amp; Algorithms (DSA), 10 Aptitude, 7 Output, 4 Coding adaptive assessment focuses on your role and key domains: <b className="text-slate-800 dark:text-slate-200">{profile.needsImprovement.length ? profile.needsImprovement.join(', ') : 'Core Placement Readiness'}</b>.
           </p>
 
-          {/* 4 Metric Blocks (Page 4) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
-              <p className="text-xl font-bold text-slate-900 dark:text-white">20</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">MCQ</p>
+          {/* 5 Metric Blocks */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">10</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Role MCQs</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
-              <p className="text-xl font-bold text-slate-900 dark:text-white">5</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Output / Pseudo</p>
+            <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60 text-center">
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">8</p>
+              <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">DSA</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
-              <p className="text-xl font-bold text-slate-900 dark:text-white">5</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Coding</p>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">10</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Aptitude</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">30</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Total Questions</p>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">7</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Pseudocode</p>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-center col-span-2 sm:col-span-1">
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">4</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Coding</p>
             </div>
           </div>
 
@@ -805,9 +816,9 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
               <button
                 id="results-launch-interview-btn"
                 onClick={() => setActiveTab('interview')}
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/25 flex items-center gap-2"
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/25 flex items-center gap-2"
               >
-                Proceed to AI HR Interview
+                Proceed to Mock Placement Interview
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -829,24 +840,30 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
           </div>
         </div>
 
-        {/* Sectional Performance Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Sectional Performance Breakdown (39 Questions: 15 MCQ + 10 Aptitude + 10 Pseudocode + 4 Coding) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-            <span className="text-xs text-slate-400">MCQ Score</span>
-            <p className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-1">
-              {completedAttempt.mcqScore} / 20 pts
+            <span className="text-xs text-slate-400">Technical MCQs</span>
+            <p className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">
+              {completedAttempt.mcqScore} / 15
             </p>
           </div>
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-            <span className="text-xs text-slate-400">Pseudocode Score</span>
-            <p className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-1">
-              {completedAttempt.pseudoScore} / 10 pts
+            <span className="text-xs text-slate-400">Aptitude &amp; Logic</span>
+            <p className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">
+              {completedAttempt.aptitudeScore ?? 0} / 10
             </p>
           </div>
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-            <span className="text-xs text-slate-400">Coding Score</span>
-            <p className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-1">
-              {completedAttempt.codingScore} / 20 pts
+            <span className="text-xs text-slate-400">Pseudocode</span>
+            <p className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">
+              {completedAttempt.pseudoScore} / 10
+            </p>
+          </div>
+          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+            <span className="text-xs text-slate-400">Coding</span>
+            <p className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">
+              {completedAttempt.codingScore} / 4
             </p>
           </div>
         </div>

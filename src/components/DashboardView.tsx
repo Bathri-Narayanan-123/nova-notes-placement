@@ -83,14 +83,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: AI HR Interview */}
+        {/* Card 3: Mock Interview */}
         <div 
           id="metric-interview"
           onClick={() => setActiveTab('interview')}
           className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs cursor-pointer hover:border-blue-500/50 transition-all"
         >
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            AI HR Interview
+            Mock Placement Interview
           </span>
           <div className="mt-3 flex items-center justify-between">
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${

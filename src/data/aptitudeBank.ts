@@ -12,7 +12,13 @@ export interface AptitudeTopicItem {
   stepByStepSolution: string[];
 }
 
-export const APTITUDE_QUESTION_BANK: (Question & { stepByStepSolution?: string[]; formulaHint?: string; category?: string })[] = [
+export type AptitudeQuestion = Question & {
+  stepByStepSolution?: string[];
+  formulaHint?: string;
+  category?: string;
+};
+
+export const APTITUDE_QUESTION_BANK: AptitudeQuestion[] = [
   // ==================== QUANTITATIVE APTITUDE ====================
   {
     id: 'apt-quant-1',
@@ -354,6 +360,121 @@ export const APTITUDE_QUESTION_BANK: (Question & { stepByStepSolution?: string[]
       'Next interval must be +6.',
       '16 + 6 = 22.',
       'The 22nd letter in the English alphabet is V.'
+    ],
+  },
+  {
+    id: 'apt-quant-9',
+    role: 'All Roles',
+    type: 'APTITUDE',
+    topic: 'Quantitative Aptitude',
+    skill: 'Simple and Compound Interest',
+    difficulty: 'Medium',
+    question: 'A principal of $5,000 is invested at 10% per annum compound interest, compounded annually for 2 years. What is the total compound interest earned?',
+    correctAnswer: 'B',
+    options: [
+      { key: 'A', text: '$1,000', explanation: 'Incorrect: $1,000 is the simple interest without compounding.' },
+      { key: 'B', text: '$1,050', explanation: 'Correct: Amount = P(1 + r/100)^t = 5000 × (1.10)^2 = 5000 × 1.21 = $6,050. CI = $6,050 - $5,000 = $1,050.' },
+      { key: 'C', text: '$1,100', explanation: 'Incorrect: Calculation error.' },
+      { key: 'D', text: '$1,025', explanation: 'Incorrect: That would be semi-annual simple interest.' },
+    ],
+    formulaHint: 'CI = P × [(1 + r/100)^t - 1]',
+    stepByStepSolution: [
+      'Year 1 Interest = 10% of $5,000 = $500.',
+      'Principal for Year 2 = $5,000 + $500 = $5,500.',
+      'Year 2 Interest = 10% of $5,500 = $550.',
+      'Total Compound Interest = $500 + $550 = $1,050.'
+    ],
+  },
+  {
+    id: 'apt-quant-10',
+    role: 'All Roles',
+    type: 'APTITUDE',
+    topic: 'Quantitative Aptitude',
+    skill: 'Mixtures and Alligations',
+    difficulty: 'Hard',
+    question: 'In what ratio must tea costing $60 per kg be mixed with tea costing $65 per kg so that the resulting mixture is worth $62 per kg?',
+    correctAnswer: 'A',
+    options: [
+      { key: 'A', text: '3:2', explanation: 'Correct: By rule of alligation: (Cost of dearer - Mean) / (Mean - Cost of cheaper) = (65 - 62) / (62 - 60) = 3 / 2 = 3:2.' },
+      { key: 'B', text: '2:3', explanation: 'Incorrect: Inverted ratio.' },
+      { key: 'C', text: '3:4', explanation: 'Incorrect: Calculation error.' },
+      { key: 'D', text: '5:2', explanation: 'Incorrect: Rule of alligation requires (65-62)/(62-60).' },
+    ],
+    formulaHint: 'Quantity of Cheaper / Quantity of Dearer = (d - m) / (m - c)',
+    stepByStepSolution: [
+      'Cheaper price (c) = $60/kg.',
+      'Dearer price (d) = $65/kg.',
+      'Mean price (m) = $62/kg.',
+      'Ratio = (d - m) : (m - c) = (65 - 62) : (62 - 60) = 3 : 2.'
+    ],
+  },
+  {
+    id: 'apt-quant-11',
+    role: 'All Roles',
+    type: 'APTITUDE',
+    topic: 'Quantitative Aptitude',
+    skill: 'Basic Algebra',
+    difficulty: 'Easy',
+    question: 'If 3x + 2y = 26 and y = 4, what is the value of 2x - y?',
+    correctAnswer: 'C',
+    options: [
+      { key: 'A', text: '6', explanation: 'Incorrect: 2x - y = 2(6) - 4 = 8.' },
+      { key: 'B', text: '10', explanation: 'Incorrect: 2(6) - 4 = 8.' },
+      { key: 'C', text: '8', explanation: 'Correct: Substitute y = 4: 3x + 8 = 26 => 3x = 18 => x = 6. Then 2x - y = 2(6) - 4 = 12 - 4 = 8.' },
+      { key: 'D', text: '12', explanation: 'Incorrect: 12 is 2x, forgot to subtract y.' },
+    ],
+    formulaHint: 'Substitute known variable and solve linear equation.',
+    stepByStepSolution: [
+      'Given 3x + 2y = 26 and y = 4.',
+      '3x + 2(4) = 26 => 3x + 8 = 26.',
+      '3x = 18 => x = 6.',
+      'Compute 2x - y: 2(6) - 4 = 12 - 4 = 8.'
+    ],
+  },
+  {
+    id: 'apt-logic-7',
+    role: 'All Roles',
+    type: 'APTITUDE',
+    topic: 'Logical Reasoning',
+    skill: 'Syllogisms',
+    difficulty: 'Medium',
+    question: 'Statements:\n1. All algorithms are programs.\n2. All programs are logic.\nConclusions:\nI. All algorithms are logic.\nII. Some logic are algorithms.\nWhich conclusion(s) follow logically?',
+    correctAnswer: 'D',
+    options: [
+      { key: 'A', text: 'Only conclusion I follows', explanation: 'Incorrect: Conclusion II also follows by conversion.' },
+      { key: 'B', text: 'Only conclusion II follows', explanation: 'Incorrect: Conclusion I also follows transitively.' },
+      { key: 'C', text: 'Neither conclusion follows', explanation: 'Incorrect: Both statements follow valid deductive logic.' },
+      { key: 'D', text: 'Both conclusion I and II follow', explanation: 'Correct: Transitive property: All A are B, and all B are C implies All A are C (Conclusion I). If All A are C, then Some C are A (Conclusion II).' },
+    ],
+    formulaHint: 'Universal affirmative syllogism: All A are B and All B are C => All A are C and Some C are A.',
+    stepByStepSolution: [
+      'Draw Euler circles: Circle(Algorithms) ⊂ Circle(Programs) ⊂ Circle(Logic).',
+      'Conclusion I: All algorithms are enclosed inside Logic => Follows.',
+      'Conclusion II: Logic circle encloses algorithms, so some part of Logic is Algorithms => Follows.',
+      'Therefore, both I and II follow.'
+    ],
+  },
+  {
+    id: 'apt-logic-8',
+    role: 'All Roles',
+    type: 'APTITUDE',
+    topic: 'Logical Reasoning',
+    skill: 'Pattern Recognition',
+    difficulty: 'Medium',
+    question: 'Find the missing number in the 3x3 matrix:\n[ 3   4   25 ]\n[ 5   12  169 ]\n[ 7   24  ?   ]',
+    correctAnswer: 'B',
+    options: [
+      { key: 'A', text: '576', explanation: 'Incorrect: 24² = 576, but need 7² + 24².' },
+      { key: 'B', text: '625', explanation: 'Correct: The pattern in each row is a Pythagorean triple: row 1: 3² + 4² = 9 + 16 = 25. Row 2: 5² + 12² = 25 + 144 = 169. Row 3: 7² + 24² = 49 + 576 = 625.' },
+      { key: 'C', text: '676', explanation: 'Incorrect: 676 = 26².' },
+      { key: 'D', text: '490', explanation: 'Incorrect: The pattern is sum of squares: 49 + 576 = 625.' },
+    ],
+    formulaHint: 'Row pattern: Col1² + Col2² = Col3',
+    stepByStepSolution: [
+      'Row 1: 3² + 4² = 9 + 16 = 25.',
+      'Row 2: 5² + 12² = 25 + 144 = 169.',
+      'Row 3: 7² + 24² = 49 + 576 = 625.',
+      'Missing number is 625.'
     ],
   },
 ];

@@ -70,7 +70,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
     {
       num: 8,
       title: 'Where to put each environment variable',
-      content: 'In the project root, open or create ".env" or configure the AI Studio Settings secrets panel. Set: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and ADMIN_EMAIL.',
+      content: 'In the project root, open or create ".env" or configure the environment secrets panel. Set: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and ADMIN_EMAIL.',
       code: `VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ADMIN_EMAIL=bathrinarayanan53@gmail.com`,
@@ -101,7 +101,7 @@ WHERE email = 'bathrinarayanan53@gmail.com';`,
     {
       num: 13,
       title: 'How to test Student Login',
-      content: 'On the Nova Notes Login page, ensure "Student Login" is selected. Click "Continue with Google". You will immediately be routed to the Student Dashboard with placement readiness, assessment history, practice, and AI interview modules.',
+      content: 'On the Nova Notes Login page, ensure "Student Login" is selected. Click "Continue with Google". You will immediately be routed to the Student Dashboard with placement readiness, assessment history, practice, and mock interview modules.',
     },
     {
       num: 14,

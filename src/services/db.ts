@@ -360,31 +360,42 @@ class DatabaseService {
     const allQuestions = this.getAllQuestions();
     const attemptedIds = new Set(this.getAttemptedQuestionIds());
 
-    // 1. Role-specific MCQs
-    const mcqs = allRoleQuestions.filter((q) => q.type === 'MCQ');
+    // 1. Role-specific MCQs (10 questions)
+    const mcqs = allRoleQuestions.filter((q) => q.type === 'MCQ' && q.topic !== 'DSA');
     const unattemptedMcqs = mcqs.filter((q) => !attemptedIds.has(q.id));
 
-    // 2. Aptitude (Quantitative + Logical)
+    // 2. Data Structures & Algorithms (DSA) (8 questions)
+    const dsas = allQuestions.filter(
+      (q) =>
+        (q.type as string) === 'DSA' ||
+        q.topic.toLowerCase().includes('dsa') ||
+        q.skill.toLowerCase().includes('dsa') ||
+        q.skill.toLowerCase().includes('data structure') ||
+        q.skill.toLowerCase().includes('algorithm')
+    );
+    const unattemptedDsas = dsas.filter((q) => !attemptedIds.has(q.id));
+
+    // 3. Aptitude (Quantitative + Logical) (10 questions)
     const aptitudes = allQuestions.filter(
       (q) => q.type === 'APTITUDE' || q.topic.includes('Aptitude') || q.topic.includes('Reasoning')
     );
     const unattemptedAptitudes = aptitudes.filter((q) => !attemptedIds.has(q.id));
 
-    // 3. Pseudocode / Output Prediction
+    // 4. Pseudocode / Output Prediction (7 questions)
     const pseudos = allQuestions.filter(
       (q) => q.type === 'PSEUDOCODE' && (q.role.toLowerCase() === roleTitle.toLowerCase() || q.role === 'All Roles')
     );
     const unattemptedPseudos = pseudos.filter((q) => !attemptedIds.has(q.id));
 
-    // 4. Coding Problems
+    // 5. Coding Problems (4 questions)
     const codings = allQuestions.filter(
       (q) => q.type === 'CODING' && (q.role.toLowerCase() === roleTitle.toLowerCase() || q.role === 'All Roles')
     );
     const unattemptedCodings = codings.filter((q) => !attemptedIds.has(q.id));
 
     let poolStatus: 'abundant' | 'low' | 'recycled' = 'abundant';
-    if (unattemptedMcqs.length < 15 || unattemptedAptitudes.length < 10 || unattemptedPseudos.length < 10 || unattemptedCodings.length < 4) {
-      poolStatus = unattemptedMcqs.length < 8 ? 'recycled' : 'low';
+    if (unattemptedMcqs.length < 10 || unattemptedDsas.length < 8 || unattemptedAptitudes.length < 10 || unattemptedPseudos.length < 7 || unattemptedCodings.length < 4) {
+      poolStatus = unattemptedMcqs.length < 5 ? 'recycled' : 'low';
     }
 
     // Generic selector with adaptive weighting
@@ -392,7 +403,7 @@ class DatabaseService {
       unattempted: Question[],
       fallbackAll: Question[],
       count: number,
-      type: 'MCQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING'
+      type: 'MCQ' | 'DSA' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING'
     ): Question[] => {
       let pool = [...unattempted];
       if (pool.length < count) {
@@ -423,24 +434,82 @@ class DatabaseService {
       return selected;
     };
 
-    const targetMcqs = selectQuestions(unattemptedMcqs, mcqs, 15, 'MCQ');
+    const targetMcqs = selectQuestions(unattemptedMcqs, mcqs, 10, 'MCQ');
+    const targetDsas = selectQuestions(unattemptedDsas, dsas, 8, 'DSA');
     const targetAptitudes = selectQuestions(unattemptedAptitudes, aptitudes, 10, 'APTITUDE');
-    const targetPseudos = selectQuestions(unattemptedPseudos, pseudos, 10, 'PSEUDOCODE');
+    const targetPseudos = selectQuestions(unattemptedPseudos, pseudos, 7, 'PSEUDOCODE');
     const targetCodings = selectQuestions(unattemptedCodings, codings, 4, 'CODING');
 
-    const combined = [...targetMcqs, ...targetAptitudes, ...targetPseudos, ...targetCodings];
+    const combined = [...targetMcqs, ...targetDsas, ...targetAptitudes, ...targetPseudos, ...targetCodings];
     return { questions: combined, poolStatus };
   }
 
   // Procedural synthetic generator for infinite high-quality variations
   private createSyntheticQuestion(
     role: string,
-    type: 'MCQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING',
+    type: 'MCQ' | 'DSA' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING',
     index: number,
     weakTopics: string[]
   ): Question {
-    const topic = type === 'APTITUDE' ? 'Quantitative Aptitude' : (weakTopics[0] || 'Problem Solving');
+    const topic = type === 'APTITUDE' ? 'Quantitative Aptitude' : type === 'DSA' ? 'DSA' : (weakTopics[0] || 'Problem Solving');
     const id = `synth-${role.toLowerCase().replace(/\s+/g, '-')}-${type.toLowerCase()}-${index}-${Date.now()}`;
+
+    if (type === 'DSA') {
+      const dsaVariants = [
+        {
+          q: 'What is the worst-case time complexity of finding an element in a balanced Binary Search Tree (AVL or Red-Black Tree)?',
+          ans: 'B',
+          opts: [
+            { key: 'A', text: 'O(1)', explanation: 'Incorrect: Binary search tree lookup is logarithmic, not constant.' },
+            { key: 'B', text: 'O(log n)', explanation: 'Correct: Balanced BSTs strictly maintain height <= c*log(n), ensuring worst-case O(log n) lookup.' },
+            { key: 'C', text: 'O(n)', explanation: 'Incorrect: O(n) only occurs in degenerate, unbalanced BSTs; self-balancing trees avoid this.' },
+            { key: 'D', text: 'O(n log n)', explanation: 'Incorrect: That is the time complexity of sorting, not single element lookup.' }
+          ]
+        },
+        {
+          q: 'Which graph traversal algorithm uses a Queue data structure to visit vertices level-by-level?',
+          ans: 'C',
+          opts: [
+            { key: 'A', text: 'Depth-First Search (DFS)', explanation: 'Incorrect: DFS uses a Stack (or the call stack via recursion).' },
+            { key: 'B', text: 'Bellman-Ford Algorithm', explanation: 'Incorrect: Bellman-Ford repeatedly relaxes all edges |V|-1 times.' },
+            { key: 'C', text: 'Breadth-First Search (BFS)', explanation: 'Correct: BFS processes vertices in FIFO order using a Queue.' },
+            { key: 'D', text: 'Kruskal Algorithm', explanation: 'Incorrect: Kruskal uses a Disjoint Set Union (Union-Find) and priority queue.' }
+          ]
+        },
+        {
+          q: 'What data structure is predominantly used to evaluate postfix arithmetic expressions and balance parentheses?',
+          ans: 'A',
+          opts: [
+            { key: 'A', text: 'Stack (LIFO)', explanation: 'Correct: Stacks provide Last-In-First-Out access ideal for matching nested pairs and postfix evaluation.' },
+            { key: 'B', text: 'Queue (FIFO)', explanation: 'Incorrect: Queues process elements first-in-first-out, which does not match innermost-first nesting.' },
+            { key: 'C', text: 'Min-Heap', explanation: 'Incorrect: Heaps prioritize smallest elements, not nesting order.' },
+            { key: 'D', text: 'Circular Linked List', explanation: 'Incorrect: Lists do not inherently enforce LIFO semantics.' }
+          ]
+        },
+        {
+          q: 'What is the average and worst-case time complexity of QuickSort?',
+          ans: 'D',
+          opts: [
+            { key: 'A', text: 'Average O(n), Worst O(n^2)', explanation: 'Incorrect: Comparison sorting requires at least O(n log n) average time.' },
+            { key: 'B', text: 'Average O(n log n), Worst O(n log n)', explanation: 'Incorrect: MergeSort guarantees O(n log n) worst-case, but standard QuickSort has an O(n^2) worst case with poor pivot selection.' },
+            { key: 'C', text: 'Average O(n^2), Worst O(n^2)', explanation: 'Incorrect: QuickSort is average O(n log n).' },
+            { key: 'D', text: 'Average O(n log n), Worst O(n^2)', explanation: 'Correct: QuickSort partitions in linear time with O(log n) tree depth on average, degrading to O(n^2) when pivots are consistently extreme.' }
+          ]
+        }
+      ];
+      const selected = dsaVariants[index % dsaVariants.length];
+      return {
+        id,
+        role: 'All Roles',
+        type: 'MCQ',
+        topic: 'DSA',
+        skill: 'Data Structures & Algorithms',
+        difficulty: 'Medium',
+        question: selected.q,
+        correctAnswer: selected.ans,
+        options: selected.opts as any,
+      };
+    }
 
     if (type === 'APTITUDE') {
       const aptVariants = [
