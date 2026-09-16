@@ -345,48 +345,62 @@ class DatabaseService {
   }
 
   // ==================== ADAPTIVE QUESTION SELECTION ====================
-  // Selects 30 questions (20 MCQ, 5 Pseudocode, 5 Coding)
+  // Exactly 39 Questions:
+  // 15 Role-Specific MCQs
+  // 10 Aptitude Questions (Quantitative & Logical Reasoning)
+  // 10 Pseudocode Output Prediction Questions
+  // 4 Coding Questions
   // Guarantees DIFFERENT questions from previous attempts where possible!
-  // In adaptive reattempt mode, prioritizes weak topics!
   public generateAssessmentQuestions(
     roleTitle: string,
     isAdaptive: boolean = false,
     weakTopics: string[] = []
   ): { questions: Question[]; poolStatus: 'abundant' | 'low' | 'recycled' } {
     const allRoleQuestions = this.getQuestionsForRole(roleTitle);
+    const allQuestions = this.getAllQuestions();
     const attemptedIds = new Set(this.getAttemptedQuestionIds());
 
-    // Separate by type
+    // 1. Role-specific MCQs
     const mcqs = allRoleQuestions.filter((q) => q.type === 'MCQ');
-    const pseudos = allRoleQuestions.filter((q) => q.type === 'PSEUDOCODE');
-    const codings = allRoleQuestions.filter((q) => q.type === 'CODING');
-
-    // Unattempted pool
     const unattemptedMcqs = mcqs.filter((q) => !attemptedIds.has(q.id));
+
+    // 2. Aptitude (Quantitative + Logical)
+    const aptitudes = allQuestions.filter(
+      (q) => q.type === 'APTITUDE' || q.topic.includes('Aptitude') || q.topic.includes('Reasoning')
+    );
+    const unattemptedAptitudes = aptitudes.filter((q) => !attemptedIds.has(q.id));
+
+    // 3. Pseudocode / Output Prediction
+    const pseudos = allQuestions.filter(
+      (q) => q.type === 'PSEUDOCODE' && (q.role.toLowerCase() === roleTitle.toLowerCase() || q.role === 'All Roles')
+    );
     const unattemptedPseudos = pseudos.filter((q) => !attemptedIds.has(q.id));
+
+    // 4. Coding Problems
+    const codings = allQuestions.filter(
+      (q) => q.type === 'CODING' && (q.role.toLowerCase() === roleTitle.toLowerCase() || q.role === 'All Roles')
+    );
     const unattemptedCodings = codings.filter((q) => !attemptedIds.has(q.id));
 
     let poolStatus: 'abundant' | 'low' | 'recycled' = 'abundant';
-    if (unattemptedMcqs.length < 20 || unattemptedPseudos.length < 5 || unattemptedCodings.length < 5) {
-      poolStatus = unattemptedMcqs.length < 10 ? 'recycled' : 'low';
+    if (unattemptedMcqs.length < 15 || unattemptedAptitudes.length < 10 || unattemptedPseudos.length < 10 || unattemptedCodings.length < 4) {
+      poolStatus = unattemptedMcqs.length < 8 ? 'recycled' : 'low';
     }
 
-    // Helper to select questions with adaptive weak topic weighting
+    // Generic selector with adaptive weighting
     const selectQuestions = (
       unattempted: Question[],
       fallbackAll: Question[],
       count: number,
-      type: 'MCQ' | 'PSEUDOCODE' | 'CODING'
+      type: 'MCQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING'
     ): Question[] => {
       let pool = [...unattempted];
       if (pool.length < count) {
-        // Recycle least recently used if pool exhausted
         const used = fallbackAll.filter((q) => !pool.some((p) => p.id === q.id));
         pool = [...pool, ...used];
       }
 
       if (isAdaptive && weakTopics.length > 0) {
-        // Prioritize questions matching weak topics
         pool.sort((a, b) => {
           const aWeak = weakTopics.includes(a.topic) || weakTopics.includes(a.skill);
           const bWeak = weakTopics.includes(b.topic) || weakTopics.includes(b.skill);
@@ -395,13 +409,12 @@ class DatabaseService {
           return 0.5 - Math.random();
         });
       } else {
-        // Random shuffle
         pool.sort(() => 0.5 - Math.random());
       }
 
       const selected = pool.slice(0, count);
 
-      // If still short of count, procedurally generate synthetic questions so 30 is ALWAYS reached!
+      // Synthesize if pool is exhausted so exactly 'count' is always provided
       while (selected.length < count) {
         const synthetic = this.createSyntheticQuestion(roleTitle, type, selected.length + 1, weakTopics);
         selected.push(synthetic);
@@ -410,23 +423,61 @@ class DatabaseService {
       return selected;
     };
 
-    const targetMcqs = selectQuestions(unattemptedMcqs, mcqs, 20, 'MCQ');
-    const targetPseudos = selectQuestions(unattemptedPseudos, pseudos, 5, 'PSEUDOCODE');
-    const targetCodings = selectQuestions(unattemptedCodings, codings, 5, 'CODING');
+    const targetMcqs = selectQuestions(unattemptedMcqs, mcqs, 15, 'MCQ');
+    const targetAptitudes = selectQuestions(unattemptedAptitudes, aptitudes, 10, 'APTITUDE');
+    const targetPseudos = selectQuestions(unattemptedPseudos, pseudos, 10, 'PSEUDOCODE');
+    const targetCodings = selectQuestions(unattemptedCodings, codings, 4, 'CODING');
 
-    const combined = [...targetMcqs, ...targetPseudos, ...targetCodings];
+    const combined = [...targetMcqs, ...targetAptitudes, ...targetPseudos, ...targetCodings];
     return { questions: combined, poolStatus };
   }
 
   // Procedural synthetic generator for infinite high-quality variations
   private createSyntheticQuestion(
     role: string,
-    type: 'MCQ' | 'PSEUDOCODE' | 'CODING',
+    type: 'MCQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING',
     index: number,
     weakTopics: string[]
   ): Question {
-    const topic = weakTopics[0] || 'Problem Solving';
+    const topic = type === 'APTITUDE' ? 'Quantitative Aptitude' : (weakTopics[0] || 'Problem Solving');
     const id = `synth-${role.toLowerCase().replace(/\s+/g, '-')}-${type.toLowerCase()}-${index}-${Date.now()}`;
+
+    if (type === 'APTITUDE') {
+      const aptVariants = [
+        {
+          q: 'A train 120m long travels at 72 km/h. How long in seconds does it take to pass a stationary signal post?',
+          ans: 'B',
+          opts: [
+            { key: 'A', text: '4 seconds', explanation: 'Incorrect.' },
+            { key: 'B', text: '6 seconds', explanation: 'Correct: 72 km/h = 72 * 5/18 = 20 m/s. Time = 120 / 20 = 6 seconds.' },
+            { key: 'C', text: '8 seconds', explanation: 'Incorrect.' },
+            { key: 'D', text: '10 seconds', explanation: 'Incorrect.' },
+          ],
+        },
+        {
+          q: 'If 8 men can complete a project in 15 days, in how many days can 12 men complete the identical project?',
+          ans: 'C',
+          opts: [
+            { key: 'A', text: '8 days', explanation: 'Incorrect.' },
+            { key: 'B', text: '9 days', explanation: 'Incorrect.' },
+            { key: 'C', text: '10 days', explanation: 'Correct: M1 * D1 = M2 * D2 => 8 * 15 = 120 man-days. D2 = 120 / 12 = 10 days.' },
+            { key: 'D', text: '12 days', explanation: 'Incorrect.' },
+          ],
+        }
+      ];
+      const selected = aptVariants[index % aptVariants.length];
+      return {
+        id,
+        role: 'All Roles',
+        type: 'APTITUDE',
+        topic: 'Quantitative Aptitude',
+        skill: 'Arithmetic',
+        difficulty: 'Medium',
+        question: selected.q,
+        correctAnswer: selected.ans,
+        options: selected.opts as any,
+      };
+    }
 
     if (type === 'MCQ') {
       const variants = [

@@ -17,13 +17,49 @@ import { Menu, X, BookOpen, Database } from 'lucide-react';
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [activeTab, setActiveTabState] = useState<NavTab>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace('#', '') as NavTab;
+      const validTabs: NavTab[] = ['dashboard', 'placement', 'practice', 'assessment', 'interview', 'progress', 'profile'];
+      if (validTabs.includes(hash)) return hash;
+    }
+    return 'dashboard';
+  });
   const [profile, setProfile] = useState<UserProfile>(() => db.getProfile());
   const [attempts, setAttempts] = useState<AssessmentAttempt[]>(() => db.getAttempts());
   const [roles, setRoles] = useState<PlacementRole[]>(() => db.getRoles());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAssessmentAdaptive, setIsAssessmentAdaptive] = useState(false);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
+
+  // Synchronize activeTab with window history and hash for back/forward browser support
+  const setActiveTab = (tab: NavTab) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      if (window.location.hash !== `#${tab}`) {
+        window.history.pushState({ tab }, '', `#${tab}`);
+      }
+    }
+  };
+
+  // Browser Back / Forward navigation listener
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const hash = (window.location.hash.replace('#', '') || (event.state?.tab)) as NavTab;
+      const validTabs: NavTab[] = ['dashboard', 'placement', 'practice', 'assessment', 'interview', 'progress', 'profile'];
+      if (validTabs.includes(hash)) {
+        setActiveTabState(hash);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
 
   // Subscribe to reactive database changes
   useEffect(() => {

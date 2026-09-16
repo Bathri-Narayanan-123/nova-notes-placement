@@ -1,8 +1,9 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
 
 dotenv.config();
 
@@ -280,23 +281,30 @@ app.get('/api/auth/config', (req, res) => {
   });
 });
 
-// ==================== CODE EXECUTION ENGINE ====================
-// Executes candidate Python or JavaScript code safely in an isolated sandbox with timeouts
-function runSandboxProcess(
-  lang: 'python' | 'javascript',
-  code: string,
+// ==================== MULTI-LANGUAGE CODE COMPILER ENGINE ====================
+// Supports Python, JavaScript, Java, C, C++, and SQL
+interface ExecutionResult {
+  stdout: string;
+  stderr: string;
+  compileError?: string | null;
+  runtimeError?: string | null;
+  timedOut: boolean;
+  exitCode: number | null;
+  durationMs: number;
+}
+
+function executeProcess(
+  cmd: string,
+  args: string[],
   stdinInput: string,
-  timeoutMs = 3000
-): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null }> {
+  timeoutMs = 4000
+): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null; durationMs: number }> {
   return new Promise((resolve) => {
     let timedOut = false;
     let stdout = '';
     let stderr = '';
+    const start = Date.now();
 
-    const cmd = lang === 'python' ? 'python3' : 'node';
-    const args: string[] = [];
-
-    // Isolate environment without any application secrets or keys
     const cleanEnv: Record<string, string> = {
       PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
       HOME: '/tmp',
@@ -304,16 +312,66 @@ function runSandboxProcess(
       PYTHONUNBUFFERED: '1',
     };
 
-    let runnableCode = code;
+    const proc = spawn(cmd, args, {
+      env: cleanEnv,
+      cwd: '/tmp',
+    });
 
-    if (lang === 'python') {
-      args.push('-c');
-      // If code doesn't read from stdin or input(), but defines a function, add smart invoker
-      const hasStdinRead = /sys\.stdin|input\(/.test(code);
-      const fnMatch = code.match(/def\s+([a-zA-Z0-9_]+)\s*\(/);
-      if (!hasStdinRead && fnMatch && !code.includes(`if __name__ == '__main__':`)) {
-        const fnName = fnMatch[1];
-        runnableCode = `${code}
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        proc.kill('SIGKILL');
+      } catch {}
+    }, timeoutMs);
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+      if (stdout.length > 50000) proc.kill('SIGKILL');
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+      if (stderr.length > 10000) proc.kill('SIGKILL');
+    });
+
+    if (proc.stdin) {
+      try {
+        proc.stdin.write(stdinInput || '');
+        proc.stdin.end();
+      } catch {}
+    }
+
+    proc.on('close', (exitCode) => {
+      clearTimeout(timer);
+      const durationMs = Date.now() - start;
+      resolve({ stdout, stderr, timedOut, exitCode, durationMs });
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      const durationMs = Date.now() - start;
+      resolve({ stdout: '', stderr: err.message, timedOut: false, exitCode: 1, durationMs });
+    });
+  });
+}
+
+async function runMultiLanguageCode(
+  language: string,
+  code: string,
+  stdinInput: string,
+  timeoutMs = 4000
+): Promise<ExecutionResult> {
+  const lang = (language || 'python').toLowerCase().trim();
+  const execId = `prog_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+  // 1. PYTHON
+  if (lang === 'python' || lang === 'py') {
+    let runnableCode = code;
+    const hasStdinRead = /sys\.stdin|input\(/.test(code);
+    const fnMatch = code.match(/def\s+([a-zA-Z0-9_]+)\s*\(/);
+    if (!hasStdinRead && fnMatch && !code.includes(`if __name__ == '__main__':`)) {
+      const fnName = fnMatch[1];
+      runnableCode = `${code}
 
 import sys, json
 
@@ -346,16 +404,27 @@ if __name__ == '__main__':
         sys.stderr.write(f"RuntimeError: {e}\\n")
         sys.exit(1)
 `;
-      }
-      args.push(runnableCode);
-    } else {
-      args.push('-e');
-      const hasStdinRead = /readline|readFileSync|fs\.read/.test(code);
-      const fnMatch = code.match(/function\s+([a-zA-Z0-9_]+)\s*\(|const\s+([a-zA-Z0-9_]+)\s*=\s*\(/);
-      const fnName = fnMatch ? (fnMatch[1] || fnMatch[2]) : null;
+    }
+    const result = await executeProcess('python3', ['-c', runnableCode], stdinInput, timeoutMs);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      runtimeError: result.exitCode !== 0 ? result.stderr : null,
+      timedOut: result.timedOut,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+    };
+  }
 
-      if (!hasStdinRead && fnName) {
-        runnableCode = `${code}
+  // 2. JAVASCRIPT / NODE
+  if (lang === 'javascript' || lang === 'js') {
+    let runnableCode = code;
+    const hasStdinRead = /readline|readFileSync|fs\.read/.test(code);
+    const fnMatch = code.match(/function\s+([a-zA-Z0-9_]+)\s*\(|const\s+([a-zA-Z0-9_]+)\s*=\s*\(/);
+    const fnName = fnMatch ? (fnMatch[1] || fnMatch[2]) : null;
+
+    if (!hasStdinRead && fnName) {
+      runnableCode = `${code}
 
 const fs = require('fs');
 try {
@@ -380,56 +449,277 @@ try {
   process.exit(1);
 }
 `;
-      }
-      args.push(runnableCode);
     }
+    const result = await executeProcess('node', ['-e', runnableCode], stdinInput, timeoutMs);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      runtimeError: result.exitCode !== 0 ? result.stderr : null,
+      timedOut: result.timedOut,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+    };
+  }
 
-    const proc = spawn(cmd, args, {
-      env: cleanEnv,
-      cwd: '/tmp',
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        proc.kill('SIGKILL');
-      } catch {}
-    }, timeoutMs);
-
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-      if (stdout.length > 50000) {
-        proc.kill('SIGKILL');
+  // 3. C (gcc)
+  if (lang === 'c') {
+    const srcPath = path.join('/tmp', `${execId}.c`);
+    const binPath = path.join('/tmp', execId);
+    try {
+      await fs.promises.writeFile(srcPath, code, 'utf-8');
+      const compile = await executeProcess('gcc', ['-O2', srcPath, '-o', binPath, '-lm'], '', 4000);
+      if (compile.exitCode !== 0) {
+        return {
+          stdout: '',
+          stderr: compile.stderr,
+          compileError: compile.stderr,
+          timedOut: false,
+          exitCode: compile.exitCode,
+          durationMs: compile.durationMs,
+        };
       }
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-      if (stderr.length > 10000) {
-        proc.kill('SIGKILL');
-      }
-    });
-
-    if (proc.stdin) {
-      try {
-        proc.stdin.write(stdinInput || '');
-        proc.stdin.end();
-      } catch {}
+      const run = await executeProcess(binPath, [], stdinInput, timeoutMs);
+      return {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        runtimeError: run.exitCode !== 0 ? run.stderr : null,
+        timedOut: run.timedOut,
+        exitCode: run.exitCode,
+        durationMs: run.durationMs,
+      };
+    } finally {
+      try { await fs.promises.unlink(srcPath); } catch {}
+      try { await fs.promises.unlink(binPath); } catch {}
     }
+  }
 
-    proc.on('close', (exitCode) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, timedOut, exitCode });
-    });
+  // 4. C++ (g++)
+  if (lang === 'cpp' || lang === 'c++') {
+    const srcPath = path.join('/tmp', `${execId}.cpp`);
+    const binPath = path.join('/tmp', execId);
+    try {
+      await fs.promises.writeFile(srcPath, code, 'utf-8');
+      const compile = await executeProcess('g++', ['-O2', '-std=c++17', srcPath, '-o', binPath], '', 5000);
+      if (compile.exitCode !== 0) {
+        return {
+          stdout: '',
+          stderr: compile.stderr,
+          compileError: compile.stderr,
+          timedOut: false,
+          exitCode: compile.exitCode,
+          durationMs: compile.durationMs,
+        };
+      }
+      const run = await executeProcess(binPath, [], stdinInput, timeoutMs);
+      return {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        runtimeError: run.exitCode !== 0 ? run.stderr : null,
+        timedOut: run.timedOut,
+        exitCode: run.exitCode,
+        durationMs: run.durationMs,
+      };
+    } finally {
+      try { await fs.promises.unlink(srcPath); } catch {}
+      try { await fs.promises.unlink(binPath); } catch {}
+    }
+  }
 
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({ stdout: '', stderr: err.message, timedOut: false, exitCode: 1 });
-    });
-  });
+  // 5. JAVA
+  if (lang === 'java') {
+    // Extract public class name or use Main
+    const classMatch = code.match(/public\s+class\s+([A-Za-z0-9_]+)/);
+    const className = classMatch ? classMatch[1] : 'Main';
+    const classDir = path.join('/tmp', execId);
+    const javaSrc = path.join(classDir, `${className}.java`);
+
+    try {
+      await fs.promises.mkdir(classDir, { recursive: true });
+      let runnableJava = code;
+      if (!classMatch && !code.includes('class Main')) {
+        runnableJava = `public class Main {\n${code}\n}`;
+      }
+      await fs.promises.writeFile(javaSrc, runnableJava, 'utf-8');
+
+      // Compile with javac
+      const compile = await executeProcess('javac', [javaSrc], '', 6000);
+      if (compile.exitCode !== 0) {
+        return {
+          stdout: '',
+          stderr: compile.stderr,
+          compileError: compile.stderr,
+          timedOut: false,
+          exitCode: compile.exitCode,
+          durationMs: compile.durationMs,
+        };
+      }
+
+      // Run with java
+      const run = await executeProcess('java', ['-cp', classDir, className], stdinInput, timeoutMs);
+      return {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        runtimeError: run.exitCode !== 0 ? run.stderr : null,
+        timedOut: run.timedOut,
+        exitCode: run.exitCode,
+        durationMs: run.durationMs,
+      };
+    } finally {
+      try { await fs.promises.rm(classDir, { recursive: true, force: true }); } catch {}
+    }
+  }
+
+  // 6. SQL (Executed using SQLite embedded in Python)
+  if (lang === 'sql') {
+    const pythonSqlRunner = `
+import sqlite3, sys, json
+
+try:
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    
+    # Pre-seed standard placement database schema
+    cursor.executescript('''
+    CREATE TABLE departments (
+        dept_id INTEGER PRIMARY KEY,
+        dept_name TEXT NOT NULL,
+        location TEXT
+    );
+    INSERT INTO departments VALUES 
+        (1, 'Engineering', 'Bangalore'),
+        (2, 'Data Science', 'Hyderabad'),
+        (3, 'Product', 'Pune'),
+        (4, 'Quality Assurance', 'Chennai');
+
+    CREATE TABLE employees (
+        emp_id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        dept_id INTEGER,
+        salary INTEGER,
+        hire_date TEXT,
+        FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
+    );
+    INSERT INTO employees VALUES
+        (101, 'Aarav Patel', 1, 85000, '2022-01-15'),
+        (102, 'Diya Sharma', 2, 92000, '2021-06-20'),
+        (103, 'Rohan Verma', 1, 78000, '2023-03-10'),
+        (104, 'Ananya Iyer', 3, 95000, '2020-11-01'),
+        (105, 'Karthik Rao', 4, 65000, '2022-08-14'),
+        (106, 'Pooja Nair', 2, 88000, '2023-01-05');
+
+    CREATE TABLE students (
+        student_id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        branch TEXT,
+        cgpa REAL,
+        placement_status TEXT
+    );
+    INSERT INTO students VALUES
+        (1, 'Vikram Malhotra', 'CSE', 8.9, 'Placed'),
+        (2, 'Sneha Joshi', 'IT', 8.2, 'Placed'),
+        (3, 'Rahul Sen', 'ECE', 7.4, 'Eligible'),
+        (4, 'Meera Nambiar', 'CSE', 9.4, 'Placed'),
+        (5, 'Aditya Roy', 'EEE', 6.8, 'In Training');
+    ''')
+
+    user_query = sys.stdin.read().strip()
+    if not user_query:
+        print(json.dumps({"columns": [], "rows": [], "rowCount": 0}))
+        sys.exit(0)
+
+    cursor.execute(user_query)
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description] if cursor.description else []
+    
+    print(json.dumps({
+        "columns": columns,
+        "rows": rows,
+        "rowCount": len(rows)
+    }))
+    conn.commit()
+    conn.close()
+except Exception as e:
+    sys.stderr.write(str(e))
+    sys.exit(1)
+`;
+    const result = await executeProcess('python3', ['-c', pythonSqlRunner], code, timeoutMs);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      runtimeError: result.exitCode !== 0 ? result.stderr : null,
+      timedOut: result.timedOut,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+    };
+  }
+
+  // Fallback
+  return {
+    stdout: '',
+    stderr: `Unsupported language: ${language}`,
+    timedOut: false,
+    exitCode: 1,
+    durationMs: 0,
+  };
 }
 
-// Code Evaluation endpoint: runs candidate code against visible and hidden test cases
+// Single Run Endpoint (Used by interactive code playground and compiler)
+app.post('/api/code/run', async (req, res) => {
+  try {
+    const { language = 'python', code = '', stdin = '' } = req.body;
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+
+    const result = await runMultiLanguageCode(language, code, stdin, 4000);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Code run error:', error);
+    res.status(500).json({ error: 'Failed to run code', details: error?.message });
+  }
+});
+
+// Dedicated SQL Query Run Endpoint
+app.post('/api/sql/run', async (req, res) => {
+  try {
+    const { query = '' } = req.body;
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'SQL query is required' });
+    }
+
+    const result = await runMultiLanguageCode('sql', query, '', 3000);
+    if (result.exitCode !== 0) {
+      return res.json({
+        success: false,
+        error: result.stderr || 'SQL execution failed',
+        durationMs: result.durationMs,
+      });
+    }
+
+    try {
+      const parsed = JSON.parse(result.stdout || '{}');
+      res.json({
+        success: true,
+        ...parsed,
+        durationMs: result.durationMs,
+      });
+    } catch {
+      res.json({
+        success: true,
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        rawOutput: result.stdout,
+        durationMs: result.durationMs,
+      });
+    }
+  } catch (error: any) {
+    console.error('SQL query error:', error);
+    res.status(500).json({ error: 'SQL execution failed', details: error?.message });
+  }
+});
+
+// Multi-Testcase Code Evaluation endpoint: runs candidate code against test cases
 app.post('/api/code/evaluate', async (req, res) => {
   try {
     const { language = 'python', code, testCases = [] } = req.body;
@@ -442,7 +732,6 @@ app.post('/api/code/evaluate', async (req, res) => {
       return res.status(400).json({ error: 'At least one testcase is required' });
     }
 
-    const validLang = language.toLowerCase() === 'javascript' ? 'javascript' : 'python';
     const results = [];
     let passedCount = 0;
 
@@ -451,9 +740,7 @@ app.post('/api/code/evaluate', async (req, res) => {
       const stdinInput = String(tc.input ?? '');
       const expectedOutput = String(tc.expectedOutput ?? '').trim().replace(/\r\n/g, '\n');
 
-      const start = Date.now();
-      const exec = await runSandboxProcess(validLang, code, stdinInput, 3000);
-      const durationMs = Date.now() - start;
+      const exec = await runMultiLanguageCode(language, code, stdinInput, 3500);
 
       const actualTrimmed = exec.stdout.trim().replace(/\r\n/g, '\n');
       const isPassed = !exec.timedOut && exec.exitCode === 0 && actualTrimmed === expectedOutput;
@@ -466,11 +753,14 @@ app.post('/api/code/evaluate', async (req, res) => {
         testCaseIndex: i + 1,
         input: tc.isHidden ? '[Hidden Test Case]' : tc.input,
         expectedOutput: tc.isHidden ? '[Hidden Test Case]' : tc.expectedOutput,
-        actualOutput: tc.isHidden && !isPassed ? '[Mismatch on Hidden Test Case]' : (exec.timedOut ? 'Time Limit Exceeded (3.0s)' : actualTrimmed),
+        actualOutput: tc.isHidden && !isPassed 
+          ? '[Mismatch on Hidden Test Case]' 
+          : (exec.timedOut ? 'Time Limit Exceeded (3.5s)' : (exec.compileError || exec.runtimeError || actualTrimmed)),
         passed: isPassed,
         timedOut: exec.timedOut,
-        runtimeError: exec.stderr ? exec.stderr.slice(0, 300) : null,
-        durationMs,
+        compileError: exec.compileError || null,
+        runtimeError: exec.runtimeError ? exec.runtimeError.slice(0, 300) : null,
+        durationMs: exec.durationMs,
         isHidden: !!tc.isHidden,
       });
     }

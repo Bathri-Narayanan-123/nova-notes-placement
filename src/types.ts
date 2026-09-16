@@ -1,7 +1,18 @@
 export type UserRole = 'student' | 'admin';
 
-export type QuestionType = 'MCQ' | 'MSQ' | 'PSEUDOCODE' | 'CODING';
+export type QuestionType = 'MCQ' | 'MSQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
+export type ProgrammingLanguage = 'python' | 'java' | 'c' | 'cpp' | 'javascript' | 'sql';
+
+export type ApplicationState = 
+  | 'ROLE_SELECTED'
+  | 'ASSESSMENT_NOT_STARTED'
+  | 'ASSESSMENT_SUBMITTED'
+  | 'RESULT_AVAILABLE'
+  | 'NOT_QUALIFIED'
+  | 'QUALIFIED'
+  | 'INTERVIEW_UNLOCKED'
+  | 'INTERVIEW_COMPLETED';
 
 export interface OptionWithExplanation {
   key: 'A' | 'B' | 'C' | 'D';
@@ -23,7 +34,7 @@ export interface Question {
   skill: string;
   difficulty: Difficulty;
   question: string;
-  // MCQ specific
+  // MCQ and Aptitude specific
   options?: OptionWithExplanation[];
   correctAnswer?: string | string[];
   // Pseudocode specific
@@ -32,9 +43,12 @@ export interface Question {
   explanation?: string;
   // Coding specific
   codeTemplate?: string;
+  codeTemplatesByLanguage?: Partial<Record<ProgrammingLanguage, string>>;
   testCases?: TestCase[];
   constraints?: string;
-  supportedLanguages?: string[];
+  supportedLanguages?: ProgrammingLanguage[];
+  // SQL specific table schema hints
+  sqlSchema?: string;
 }
 
 export interface PlacementRole {
@@ -46,7 +60,7 @@ export interface PlacementRole {
   color: string;
   defaultComposition: {
     mcq: number;
-    msq: number;
+    aptitude: number;
     output: number;
     coding: number;
   };
@@ -58,12 +72,13 @@ export interface AssessmentAttempt {
   studentId: string;
   role: string;
   date: string;
-  score: number; // 0 - 100
+  score: number; // 0 - 100 overall
   isQualified: boolean;
-  mcqScore: number;
-  pseudoScore: number;
-  codingScore: number;
-  totalQuestions: number;
+  mcqScore: number; // out of 15
+  aptitudeScore?: number; // out of 10
+  pseudoScore: number; // out of 10
+  codingScore: number; // out of 4
+  totalQuestions: number; // 39
   correctCount: number;
   durationMinutes: number;
   questions: Question[];
@@ -72,6 +87,7 @@ export interface AssessmentAttempt {
   weakTopics: string[];
   strongTopics: string[];
   isAdaptive?: boolean;
+  applicationState?: ApplicationState;
 }
 
 export interface PracticeSession {
@@ -121,6 +137,7 @@ export interface UserProfile {
   id: string;
   email: string;
   fullName: string;
+  college?: string;
   role: UserRole;
   selectedRole: string;
   memberSince: string;
@@ -132,6 +149,7 @@ export interface UserProfile {
   interviewMinutes: number;
   practiceQuestionsCount: number;
   assessmentStatus: string;
+  applicationState?: ApplicationState;
   interviewStatus: 'locked' | 'unlocked' | 'completed';
   strongSkills: string[];
   needsImprovement: string[];
