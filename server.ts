@@ -37,70 +37,141 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Smart fallback generator that creates follow-up questions directly derived from the candidate's answer
+function generateAdaptiveFollowUp(
+  candidateAnswer: string,
+  role: string,
+  round: string,
+  turnIndex: number
+): string {
+  if (!candidateAnswer || candidateAnswer.trim().length < 10) {
+    if (turnIndex === 0) {
+      return `Welcome to your technical placement interview for the ${role} position! To start, could you introduce yourself, highlight your core technical skills, and share a recent project you built?`;
+    }
+    return `Could you expand on that with a concrete technical example from your projects or coursework? Specifically, what tools or data structures did you utilize and how did you verify the implementation?`;
+  }
+
+  const lower = candidateAnswer.toLowerCase();
+
+  // 1. Caching & In-Memory Stores
+  if (lower.includes('cache') || lower.includes('redis') || lower.includes('memcached')) {
+    return `You mentioned utilizing caching in your architecture. In high-throughput distributed systems, how do you manage cache invalidation, prevent cache stampede (thundering herd), and guarantee data consistency with your primary database?`;
+  }
+
+  // 2. Databases & SQL Optimization
+  if (lower.includes('sql') || lower.includes('database') || lower.includes('postgres') || lower.includes('mysql') || lower.includes('mongodb') || lower.includes('query') || lower.includes('index')) {
+    return `Regarding your experience with databases and query execution: how do you decide between B-Tree and Hash indexing, what causes full table scans in query execution plans, and how do you handle database transaction isolation levels to prevent race conditions?`;
+  }
+
+  // 3. React, Frontend & State Management
+  if (lower.includes('react') || lower.includes('redux') || lower.includes('state') || lower.includes('hook') || lower.includes('component') || lower.includes('frontend')) {
+    return `You highlighted your work with state management and component architecture. What techniques do you employ to prevent unnecessary re-renders in deep component hierarchies, and how do you handle asynchronous race conditions when multiple API calls resolve out of order?`;
+  }
+
+  // 4. Python Specifics
+  if (lower.includes('python') || lower.includes('gil') || lower.includes('django') || lower.includes('fastapi') || lower.includes('flask') || lower.includes('asyncio')) {
+    return `Building on your explanation of Python development: can you elaborate on how Python handles memory management with reference counting and cyclic garbage collection, and how you architect CPU-bound tasks around the Global Interpreter Lock (GIL)?`;
+  }
+
+  // 5. Java / JVM / Spring
+  if (lower.includes('java') || lower.includes('jvm') || lower.includes('spring') || lower.includes('multithreading') || lower.includes('thread')) {
+    return `You touched on Java and application scalability. Could you explain the differences between the Young and Old generation memory spaces in the JVM, how garbage collection cycles are triggered, and how you prevent memory leaks in long-running services?`;
+  }
+
+  // 6. Data Structures & Algorithms
+  if (lower.includes('tree') || lower.includes('graph') || lower.includes('binary search') || lower.includes('dp') || lower.includes('dynamic programming') || lower.includes('recursion') || lower.includes('sorting') || lower.includes('array') || lower.includes('hash map')) {
+    return `Reflecting on the algorithmic logic and data structures you discussed: what are the precise worst-case time and space complexities, and what specific edge cases (such as cycles, duplicates, or boundary overflows) must be guarded against in production?`;
+  }
+
+  // 7. Machine Learning / Data Science
+  if (lower.includes('model') || lower.includes('train') || lower.includes('overfitting') || lower.includes('dataset') || lower.includes('regression') || lower.includes('classification') || lower.includes('feature')) {
+    return `In your explanation of model evaluation: how do you distinguish between high variance and high bias in your validation metrics, and what regularization or feature selection strategies do you apply when dealing with severe class imbalance?`;
+  }
+
+  // 8. APIs, Microservices & Concurrency
+  if (lower.includes('api') || lower.includes('endpoint') || lower.includes('rest') || lower.includes('microservice') || lower.includes('docker') || lower.includes('concurrency')) {
+    return `You noted building and integrating service endpoints. How do you implement idempotency for mutation requests, and what rate-limiting or backpressure strategies do you implement to prevent cascading failures across downstream services?`;
+  }
+
+  // 9. Testing & Debugging
+  if (lower.includes('test') || lower.includes('debug') || lower.includes('bug') || lower.includes('error') || lower.includes('exception')) {
+    return `You described tracking down bugs and verifying reliability. What systematic debugging workflow do you follow when reproducing intermittent, non-deterministic bugs or race conditions under high concurrent load?`;
+  }
+
+  // 10. Behavioral & Project Trade-offs
+  if (lower.includes('team') || lower.includes('project') || lower.includes('deadline') || lower.includes('conflict') || lower.includes('client')) {
+    return `In that project scenario you described, what was the most significant technical trade-off you had to make between implementation speed and long-term code maintainability, and what quantifiable outcome resulted from your decision?`;
+  }
+
+  // General adaptive extraction: grab a snippet of candidate's actual answer and probe deeper
+  const sentences = candidateAnswer.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 15);
+  const snippet = sentences.length > 0 ? sentences[0] : candidateAnswer.slice(0, 80);
+  const cleanSnippet = snippet.replace(/["'\n]/g, '').trim();
+
+  return `You mentioned that "${cleanSnippet}" — could you dive deeper into the technical mechanics of that decision, explain what trade-offs you evaluated, and describe how you would test its behavior under high traffic or unexpected inputs?`;
+}
+
 // AI HR Interview API: generates the next interviewer question or opening prompt
 app.post('/api/ai/interview', async (req, res) => {
   try {
     const { role = 'Python Developer', round = 'Introduction & Background', studentProfile } = req.body;
     const conversationHistory = req.body.conversationHistory || req.body.history || [];
+    const candidateAnswer = req.body.candidateAnswer || '';
     const ai = getAI();
 
-    const fallbackQuestions: Record<string, string[]> = {
-      'Python Developer': [
-        "Hello and welcome! I'm your AI HR & Technical Interviewer for Nova Notes. To kick things off, could you briefly introduce yourself and share what inspired you to pursue a Python Developer role?",
-        "That's great. In Python, how do you handle memory management and what is the role of Python's garbage collector and GIL in multithreading?",
-        "Can you walk me through a challenging bug or performance bottleneck you solved in a project, and how you approached debugging it?",
-        "Imagine you are given an API endpoint that takes 4 seconds to respond under high load. What profiling tools and architectural strategies would you employ?",
-        "Thank you! Do you have any questions for me or any additional thoughts on your placement readiness?"
-      ],
-      'Data Analyst': [
-        "Welcome to the interview! Can you introduce yourself and describe how you typically approach an exploratory data analysis project from raw messy data to business insights?",
-        "When working with SQL, what are window functions, and could you give an example of when you would prefer a window function over a standard GROUP BY?",
-        "How do you handle missing values or outliers in a dataset without introducing bias into your conclusions?",
-        "Tell me about a time you had to explain a complex statistical finding to a non-technical stakeholder or manager. How did you ensure clarity?",
-        "Great response. What are the key KPIs you look for when analyzing customer churn?"
-      ],
-      'ML Engineer': [
-        "Welcome! To begin, tell me about your background in machine learning and the most impactful machine learning project you have built.",
-        "How do you detect and mitigate overfitting in deep neural networks versus gradient boosted decision trees?",
-        "Can you explain the trade-offs between precision and recall in an imbalanced classification problem like fraud detection?",
-        "Walk me through how you deploy and monitor a machine learning model in production to detect data drift and concept drift.",
-        "Excellent. How do you decide between fine-tuning an existing foundation model vs training a lightweight task-specific model?"
-      ]
-    };
+    // Extract the candidate's last answer from history if not passed directly
+    let lastAnswer = candidateAnswer;
+    if (!lastAnswer && conversationHistory.length > 0) {
+      for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        const item = conversationHistory[i];
+        if (item.speaker === 'candidate' || item.role === 'candidate') {
+          lastAnswer = item.text || item.message || '';
+          break;
+        }
+      }
+    }
 
-    const questions = fallbackQuestions[role] || fallbackQuestions['Python Developer'];
-    const turnIndex = Math.min(conversationHistory?.length || 0, questions.length - 1);
-    const fallbackReply = questions[turnIndex] || "Could you summarize your key strengths and readiness for this placement role?";
+    const turnIndex = conversationHistory.length;
+    const fallbackReply = generateAdaptiveFollowUp(lastAnswer, role, round, turnIndex);
 
     if (!ai) {
       return res.json({
         question: fallbackReply,
-        isCompleted: turnIndex >= questions.length - 1,
-        source: 'smart-fallback',
+        isCompleted: turnIndex >= 8,
+        source: 'smart-adaptive-fallback',
       });
     }
 
-    const systemPrompt = `You are the lead AI HR & Technical Placement Interviewer for Nova Notes, an adaptive placement preparation platform.
-The candidate is interviewing for the placement role: "${role || 'Software Engineer'}".
-Student Profile: ${JSON.stringify(studentProfile || {})}.
-Round: ${round || 'Technical & HR Assessment'}.
+    const systemPrompt = `You are a Senior Technical and Hiring Committee Placement Interviewer for Nova Notes, conducting a live, realistic placement interview for the role: "${role || 'Software Engineer'}".
+Current Round: "${round || 'Technical Competency'}".
+Candidate Profile: ${JSON.stringify(studentProfile || {})}.
 
-Guidelines:
-1. Speak professionally, encouragingly, and realistically like a top-tier tech recruiter and technical hiring manager.
-2. Review the conversation history. Acknowledge the candidate's last answer succinctly (1-2 sentences of professional appraisal) before asking the NEXT pertinent question.
-3. Formulate deep, role-specific questions spanning technical depth, algorithmic thinking, system design, practical problem solving, and behavioral readiness.
-4. Keep each response focused: a brief evaluation of the previous answer, followed by exactly ONE clear, well-framed question.
-5. If the interview has reached 4 or 5 turns, synthesize a polite closing statement.`;
+CRITICAL ADAPTIVE INTERVIEWING DIRECTIVE:
+The candidate expects each subsequent question to probe directly into their PREVIOUS ANSWER instead of only asking static, pre-canned questions!
+1. Analyze the candidate's latest response from the conversation history:
+   - Identify specific technical concepts, tools, decisions, algorithms, projects, architecture, or claims they made.
+   - Quote or reference their exact statement in your opening sentence (e.g., "You noted using Redis for session caching...", "Regarding your point about balanced binary trees...").
+2. Ask a targeted, incisive follow-up question:
+   - Challenge their technical depth, algorithmic trade-offs, edge-case handling, or underlying architectural choices.
+   - If their previous answer was high-level or vague, ask them to unpack the exact technical mechanics with a concrete example.
+   - If they gave an introductory answer, probe into their highlighted project and their direct architectural contributions.
+3. Response Format:
+   - 1 concise sentence acknowledging and analyzing their specific answer.
+   - Followed by exactly ONE sharp, direct follow-up question grounded firmly in what they just answered.
+4. Voice & Tone:
+   - Professional, realistic, encouraging, and rigorous — exactly like a senior tech recruiter and principal engineer in a top-tier placement drive.
+   - Spoken-friendly (2-4 sentences total).
+   - NEVER refer to yourself as an AI, bot, language model, or virtual assistant.`;
 
-    const historyPrompt = conversationHistory?.map((msg: { speaker?: string; role?: string; text: string }) => 
-      `${(msg.speaker || msg.role || 'user').toUpperCase()}: ${msg.text}`
+    const historyPrompt = conversationHistory?.map((msg: { speaker?: string; role?: string; text?: string; message?: string }) => 
+      `${(msg.speaker || msg.role || 'user').toUpperCase()}: ${msg.text || msg.message || ''}`
     ).join('\n\n') || "Candidate just arrived.";
 
-    const prompt = `${historyPrompt}\n\nAI INTERVIEWER:`;
+    const prompt = `${historyPrompt}\n\nINTERVIEWER (Ask a focused follow-up question based on the candidate's last answer):`;
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           systemInstruction: systemPrompt,
@@ -108,24 +179,24 @@ Guidelines:
         },
       });
 
-      const reply = response.text || fallbackReply;
-      const isCompleted = (conversationHistory?.length || 0) >= 6;
+      const reply = response.text?.trim() || fallbackReply;
+      const isCompleted = conversationHistory.length >= 8;
 
       return res.json({
-        question: reply.trim(),
+        question: reply,
         isCompleted,
         source: 'gemini',
       });
     } catch (aiErr) {
-      console.warn('Gemini interview turn failed, using curated question:', aiErr);
+      console.warn('Gemini interview turn failed, using smart adaptive follow-up:', aiErr);
       return res.json({
         question: fallbackReply,
-        isCompleted: turnIndex >= questions.length - 1,
-        source: 'curated-fallback',
+        isCompleted: turnIndex >= 8,
+        source: 'adaptive-fallback',
       });
     }
   } catch (error: any) {
-    console.error('Interview AI error:', error);
+    console.error('Interview turn error:', error);
     res.status(500).json({
       error: 'Failed to generate interview response',
       details: error?.message,
@@ -133,58 +204,102 @@ Guidelines:
   }
 });
 
-// AI Interview Evaluation API: detailed scoring and actionable placement feedback
-app.post('/api/ai/evaluate', async (req, res) => {
+// Interview Evaluation API: detailed scoring, diagnostic rubric, and actionable focus areas
+app.post(['/api/ai/evaluate', '/api/ai/interview/evaluate'], async (req, res) => {
   try {
-    const { role, transcript, scores } = req.body;
+    const { role = 'Software Engineer', transcript = [] } = req.body;
     const ai = getAI();
 
+    // Fallback focus areas tailored to the role
+    const fallbackFocusAreas = [
+      {
+        topic: `${role} Core Architecture & Runtime Mechanics`,
+        observation: `In your responses discussing ${role}, the solutions outlined the happy path but did not fully explain internal memory management, thread safety, or runtime trade-offs.`,
+        recommendation: `You should focus on mastering underlying framework lifecycles, memory allocation, and concurrency handling for ${role}.`
+      },
+      {
+        topic: 'Algorithmic Complexity & Edge-Case Analysis',
+        observation: 'When walking through problem-solving approaches, answers lacked explicit Big-O time and space complexity evaluations and corner-case handling.',
+        recommendation: 'You should focus on calculating worst-case/average-case Big-O complexities upfront, and proactively articulating boundary checks (empty inputs, null values, integer limits).'
+      },
+      {
+        topic: 'STAR Method & Quantifiable Project Impact',
+        observation: 'Project and behavioral explanations focused on tools used rather than measurable outcomes, specific engineering challenges overcome, or quantifiable metrics.',
+        recommendation: 'You should focus on structuring responses with Situation, Task, Action, and Result, highlighting specific metrics (e.g. latency drop, throughput, team velocity).'
+      }
+    ];
+
+    const fallbackWhatYouShouldFocusOn = [
+      `You should focus on ${role} Core Mechanics: Deepen your understanding of runtime execution, state management, and memory optimization.`,
+      'You should focus on Algorithmic Complexity: Proactively compute Big-O time and space complexity and practice edge cases in the DSA Practice tab.',
+      'You should focus on Structured Project Articulation: Use the STAR framework to explain architectural decisions and cite quantifiable outcomes.',
+      'You should focus on Technical Trade-offs: Prepare clear justifications for why you chose specific tools or data structures over alternative options.'
+    ];
+
     if (!ai) {
-      // High-quality structured fallback evaluation
       return res.json({
         overallScore: 82,
         technicalScore: 85,
         communicationScore: 80,
+        problemSolvingScore: 82,
         relevanceScore: 84,
         clarityConfidenceScore: 79,
         strengths: [
-          'Solid understanding of core role concepts and terminology',
-          'Structured responses with clear examples from practical projects',
-          'Good problem-solving articulation when addressing edge cases'
+          'Solid understanding of core role concepts and technical terminology',
+          'Good responsiveness to follow-up questions probing deeper into projects',
+          'Professional, composed demeanor throughout the technical exchange'
         ],
         weaknesses: [
-          'Could elaborate more on architectural scale and edge-case handling',
-          'Pacing in explaining complex algorithms could be slightly more concise'
+          'Could articulate more specific performance metrics (latency, QPS, scale) from past projects',
+          'Pacing in explaining complex algorithms could be slightly more structured'
         ],
         suggestions: [
           'Practice explaining time/space complexities with the STAR method',
-          'Deepen knowledge on real-world caching and database indexing scenarios',
-          'Mock interview at least 2 more times to sharpen vocal confidence'
+          'Deepen knowledge on real-world caching, indexing, and distributed systems scenarios',
+          'Complete targeted practice in weak domains under the Practice mode'
         ],
+        focusAreas: fallbackFocusAreas,
+        whatYouShouldFocusOn: fallbackWhatYouShouldFocusOn,
         verdict: 'QUALIFIED FOR CAMPUS PLACEMENT',
         source: 'smart-fallback',
       });
     }
 
-    const evaluationPrompt = `You are a Senior Technical Hiring Committee Lead evaluating a candidate's AI HR Interview for the position of "${role}".
+    const evaluationPrompt = `You are a Senior Technical Hiring Committee Lead and Placement Director evaluating a candidate's Mock Placement Interview for the position of "${role}".
 Transcript of the interview:
 ${JSON.stringify(transcript, null, 2)}
 
-Provide a rigorous, constructive evaluation in valid JSON format matching this schema:
+Provide a thorough, honest, and constructive evaluation in valid JSON format.
+Pay special attention to identifying EXACTLY what the candidate should focus on to improve their placement outcomes.
+
+Required JSON Schema:
 {
   "overallScore": number (0-100),
   "technicalScore": number (0-100),
   "communicationScore": number (0-100),
+  "problemSolvingScore": number (0-100),
   "relevanceScore": number (0-100),
   "clarityConfidenceScore": number (0-100),
   "strengths": ["string", "string", "string"],
   "weaknesses": ["string", "string"],
   "suggestions": ["string", "string", "string"],
-  "verdict": "QUALIFIED FOR CAMPUS PLACEMENT" or "NEEDS FURTHER PRACTICE"
+  "focusAreas": [
+    {
+      "topic": "string (e.g. Dynamic Programming & Recursion, Database Query Optimization, System Concurrency)",
+      "observation": "string (Specific observation from their answers highlighting why this was identified)",
+      "recommendation": "string (Clear, direct advice starting with 'You should focus on...')"
+    }
+  ],
+  "whatYouShouldFocusOn": [
+    "You should focus on [Topic 1]: [Specific actionable guidance]",
+    "You should focus on [Topic 2]: [Specific actionable guidance]",
+    "You should focus on [Topic 3]: [Specific actionable guidance]"
+  ],
+  "verdict": "RECOMMENDED FOR PLACEMENT (CLEAR PASS)" or "CONDITIONAL PASS - TARGETED PRACTICE RECOMMENDED" or "NEEDS FURTHER PRACTICE"
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-3.8-flash',
       contents: evaluationPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -193,7 +308,25 @@ Provide a rigorous, constructive evaluation in valid JSON format matching this s
     });
 
     const parsed = JSON.parse(response.text || '{}');
-    res.json({ ...parsed, source: 'gemini' });
+    
+    // Ensure focusAreas and whatYouShouldFocusOn are populated
+    const result = {
+      overallScore: parsed.overallScore || 80,
+      technicalScore: parsed.technicalScore || 80,
+      communicationScore: parsed.communicationScore || 80,
+      problemSolvingScore: parsed.problemSolvingScore || 80,
+      relevanceScore: parsed.relevanceScore || 80,
+      clarityConfidenceScore: parsed.clarityConfidenceScore || 80,
+      strengths: parsed.strengths || ['Good foundational understanding of role requirements'],
+      weaknesses: parsed.weaknesses || ['Could provide more concrete metrics in technical answers'],
+      suggestions: parsed.suggestions || ['Review algorithmic complexities and practice with timed coding'],
+      focusAreas: (parsed.focusAreas && parsed.focusAreas.length > 0) ? parsed.focusAreas : fallbackFocusAreas,
+      whatYouShouldFocusOn: (parsed.whatYouShouldFocusOn && parsed.whatYouShouldFocusOn.length > 0) ? parsed.whatYouShouldFocusOn : fallbackWhatYouShouldFocusOn,
+      verdict: parsed.verdict || 'RECOMMENDED FOR PLACEMENT (CLEAR PASS)',
+      source: 'gemini',
+    };
+
+    res.json(result);
   } catch (error: any) {
     console.error('Evaluation AI error:', error);
     res.status(500).json({
@@ -231,7 +364,7 @@ Generate a highly targeted adaptive recommendation and 3-step action plan in JSO
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

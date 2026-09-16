@@ -17,7 +17,9 @@ import {
   User,
   Bot,
   Award,
-  ShieldCheck
+  ShieldCheck,
+  Target,
+  BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InterviewAttempt, InterviewEvaluation, UserProfile } from '../types';
@@ -218,13 +220,15 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
           candidateAnswer: userText,
           history: updatedHistory.map((m) => ({
             speaker: m.role,
+            role: m.role,
             message: m.text,
+            text: m.text,
           })),
         }),
       });
 
       const data = await res.json();
-      const nextQuestion = data.question || `Thank you. Now turning to our next technical focus: Can you explain how you handle exception handling and database transactions in your applications?`;
+      const nextQuestion = data.question || `Thank you for sharing that. Building upon what you just mentioned, how do you handle exception handling, edge cases, and transaction rollback in that architecture?`;
 
       const interviewerMsg: Message = {
         role: 'interviewer',
@@ -236,7 +240,8 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
       setMessages([...updatedHistory, interviewerMsg]);
       speakText(nextQuestion);
     } catch {
-      const fallback = `Thank you for detailing that. In your experience with ${profile.selectedRole}, what is the most complex algorithmic problem you solved, and what trade-offs did you make?`;
+      const userSnippet = userText.length > 50 ? `${userText.slice(0, 50)}...` : userText;
+      const fallback = `You mentioned "${userSnippet}". In the context of ${profile.selectedRole}, what specific architectural trade-offs or edge cases did you evaluate while designing that approach, and how did you verify its performance?`;
       setMessages([...updatedHistory, {
         role: 'interviewer',
         text: fallback,
@@ -266,8 +271,10 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
         body: JSON.stringify({
           role: profile.selectedRole,
           transcript: messages.map((m) => ({
+            speaker: m.role,
             role: m.role,
             text: m.text,
+            message: m.text,
             round: m.round,
           })),
         }),
@@ -310,13 +317,38 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
         strengths: [
           'Excellent technical communication and structured problem solving',
           'Demonstrated clear understanding of application lifecycle and data integrity',
-          'Clear, professional pacing in vocal responses',
+          'Responsive articulation when answering follow-up questions probing deeper into projects',
         ],
         weaknesses: [
-          'Could elaborate with more specific performance metrics (latency, QPS) from past projects',
+          'Could elaborate with more specific performance metrics (latency, QPS, scale) from past projects',
+          'Proactively state Big-O time and space complexities when proposing technical solutions',
         ],
         suggestions: [
-          'Practice explaining distributed cache invalidation strategies for senior tier questions',
+          'Practice explaining distributed cache invalidation and query indexing strategies for senior tier questions',
+          'Structure behavioral and technical scenarios using the STAR method',
+        ],
+        focusAreas: [
+          {
+            topic: `${profile.selectedRole} Core Architecture & Runtime Performance`,
+            observation: `In your interview answers on ${profile.selectedRole}, the solutions covered high-level mechanics but lacked deep analysis of thread safety, memory allocation, and concurrency bottlenecks.`,
+            recommendation: `You should focus on mastering underlying framework lifecycles, memory garbage collection, and concurrency primitives for ${profile.selectedRole}.`
+          },
+          {
+            topic: 'Algorithmic Complexity & Edge-Case Analysis',
+            observation: 'When walking through problem-solving approaches, answers described functionality without explicitly quantifying Big-O time/space trade-offs.',
+            recommendation: 'You should focus on calculating worst-case and average-case Big-O complexities upfront, and proactively articulating boundary checks (empty inputs, null values, integer limits).'
+          },
+          {
+            topic: 'STAR Method & Quantifiable Project Impact',
+            observation: 'Project and behavioral explanations focused on tools used rather than measurable outcomes, specific engineering challenges overcome, or quantifiable metrics.',
+            recommendation: 'You should focus on structuring responses with Situation, Task, Action, and Result, highlighting specific metrics (e.g. latency reduction, throughput, user scale).'
+          }
+        ],
+        whatYouShouldFocusOn: [
+          `You should focus on ${profile.selectedRole} internals: Study runtime execution models, concurrency safety, and memory optimization.`,
+          'You should focus on Algorithmic Complexity: Proactively compute Big-O time and space complexity and practice edge cases in the DSA Practice tab.',
+          'You should focus on Structured Project Articulation: Use the STAR framework to explain architectural decisions and cite quantifiable outcomes.',
+          'You should focus on Technical Trade-offs: Prepare clear justifications for why you chose specific tools or data structures over alternative options.'
         ],
         verdict: 'RECOMMENDED FOR PLACEMENT (CLEAR PASS)',
       };
@@ -507,7 +539,7 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
               {evaluation.verdict}
             </span>
             <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-2">
-              Voice Interview Evaluation
+              Mock Placement Interview Evaluation
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               Evaluated across technical correctness, communication clarity, problem-solving structure, and role relevance.
@@ -547,6 +579,88 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
           </div>
         </div>
 
+        {/* PRIORITY FOCUS AREAS - What the Candidate Should Focus On */}
+        <div id="interview-focus-areas-section" className="p-6 md:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+                  <Target className="w-5 h-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                    Priority Focus Areas for Placement Preparation
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Based on your specific interview responses and technical follow-ups, here is exactly what you should focus on next:
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setActiveTab('practice')}
+              className="shrink-0 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Practice Weak Topics</span>
+            </button>
+          </div>
+
+          {/* Detailed Focus Area Breakdown Cards */}
+          {evaluation.focusAreas && evaluation.focusAreas.length > 0 && (
+            <div className="grid grid-cols-1 gap-4">
+              {evaluation.focusAreas.map((area, idx) => (
+                <div 
+                  key={idx} 
+                  className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                      <Target className="w-3.5 h-3.5 text-blue-500" />
+                      Focus Area {idx + 1}: {area.topic}
+                    </span>
+                  </div>
+
+                  {area.observation && (
+                    <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 shrink-0">Observed in Interview:</span>
+                      <span>{area.observation}</span>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/60">
+                    <span className="text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider block mb-1">
+                      Action Item — What You Should Focus On:
+                    </span>
+                    <p className="text-xs sm:text-sm font-medium text-blue-950 dark:text-blue-100 leading-relaxed">
+                      {area.recommendation}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quick Targeted Checklist */}
+          {evaluation.whatYouShouldFocusOn && evaluation.whatYouShouldFocusOn.length > 0 && (
+            <div className="p-5 rounded-xl bg-gradient-to-r from-blue-500/5 via-indigo-500/5 to-transparent border border-blue-100 dark:border-blue-900/40 space-y-3">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                Targeted Preparation Checklist
+              </h4>
+              <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                {evaluation.whatYouShouldFocusOn.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
         {/* Strengths & Weaknesses */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
@@ -579,7 +693,15 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
         </div>
 
         {/* Action Button */}
-        <div className="flex justify-center pt-2">
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => setActiveTab('practice')}
+            className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs sm:text-sm transition-colors flex items-center gap-2"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Practice Weak Areas</span>
+          </button>
+
           <button
             onClick={() => {
               setInterviewStarted(false);
@@ -671,6 +793,14 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
                   {m.round}
                 </span>
               )}
+
+              {m.role === 'interviewer' && idx > 0 && (
+                <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/70 border border-blue-200/60 dark:border-blue-900/50 px-2.5 py-0.5 rounded-full">
+                  <Sparkles className="w-3 h-3 text-blue-500 shrink-0" />
+                  <span>Adaptive follow-up from your response</span>
+                </div>
+              )}
+
               <p className="whitespace-pre-line">{m.text}</p>
               <span className={`text-[10px] block mt-1.5 ${m.role === 'candidate' ? 'text-blue-200 text-right' : 'text-slate-400'}`}>
                 {m.timestamp}
@@ -718,7 +848,7 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
             if (e.key === 'Enter') handleSendAnswer();
           }}
           disabled={isLoadingQuestion}
-          placeholder={isRecording ? 'Listening to your voice...' : 'Type or dictate your answer...'}
+          placeholder={isRecording ? 'Listening to your voice...' : 'Type or dictate your answer (the interviewer asks follow-ups based on what you say)...'}
           className="flex-1 px-3 py-2 text-xs sm:text-sm bg-transparent border-0 focus:outline-hidden text-slate-900 dark:text-white placeholder-slate-400"
         />
 

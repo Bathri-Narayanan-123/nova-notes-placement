@@ -109,6 +109,12 @@ export interface InterviewMessage {
   timestamp: string;
 }
 
+export interface InterviewFocusArea {
+  topic: string;
+  observation: string;
+  recommendation: string;
+}
+
 export interface InterviewEvaluation {
   overallScore: number;
   technicalScore: number;
@@ -120,6 +126,8 @@ export interface InterviewEvaluation {
   weaknesses: string[];
   suggestions: string[];
   actionableSuggestions?: string[];
+  focusAreas?: InterviewFocusArea[];
+  whatYouShouldFocusOn?: string[];
   verdict: string;
 }
 
