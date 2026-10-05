@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { UserProfile, PlacementRole, Question, ProgrammingLanguage } from '../types';
-import { ALL_ROLE_QUESTIONS } from '../data/roleQuestions';
 import { APTITUDE_QUESTION_BANK, AptitudeQuestion } from '../data/aptitudeBank';
 import {
   COMMON_INTERVIEW_PREP,
@@ -54,10 +53,28 @@ type PracticeCategory = 'mcq' | 'aptitude' | 'dsa' | 'pseudocode' | 'coding' | '
 export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) => {
   const [activeCategory, setActiveCategory] = useState<PracticeCategory>('mcq');
 
+  // Reactive questions directly from db service
+  const [allQuestions, setAllQuestions] = useState<Question[]>(() => db.getAllQuestions());
+
+  useEffect(() => {
+    const unsub = db.subscribe(() => {
+      setAllQuestions(db.getAllQuestions());
+    });
+    return unsub;
+  }, []);
+
   // Filters State
-  const [selectedRole, setSelectedRole] = useState<string>(profile.selectedRole || 'Full Stack Developer');
+  const [selectedRole, setSelectedRole] = useState<string>(profile.selectedRole || 'Python Developer');
   const [selectedSkill, setSelectedSkill] = useState<string>('All Skills');
   const [selectedDifficulty, setSelectedDifficulty] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
+  const [selectedPseudoLanguage, setSelectedPseudoLanguage] = useState<string>('All Languages');
+
+  // Keep selected role synced when profile updates
+  useEffect(() => {
+    if (profile.selectedRole) {
+      setSelectedRole(profile.selectedRole);
+    }
+  }, [profile.selectedRole]);
 
   // Aptitude specific sub-filters
   const [aptitudeCategory, setAptitudeCategory] = useState<'All' | 'Quantitative Aptitude' | 'Logical Reasoning'>('All');
@@ -90,7 +107,15 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
   );
   const [customStdin, setCustomStdin] = useState<string>('');
   const [isRunningCode, setIsRunningCode] = useState(false);
+  const [isRunningAllTests, setIsRunningAllTests] = useState(false);
   const [showCodingSolution, setShowCodingSolution] = useState(false);
+  const [codingTestResult, setCodingTestResult] = useState<{
+    passed: boolean;
+    totalTests: number;
+    passedTests: number;
+    details?: string;
+  } | null>(null);
+
   const [codeRunOutput, setCodeRunOutput] = useState<{
     stdout?: string;
     stderr?: string;
@@ -101,6 +126,18 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     timedOut?: boolean;
   } | null>(null);
 
+  // Update challenge when role changes
+  useEffect(() => {
+    if (availableCodingChallenges.length > 0) {
+      const first = availableCodingChallenges[0];
+      setSelectedCodingChallenge(first);
+      const template = first.starterCode[codingLanguage] || first.starterCode.python;
+      setCodingCode(template);
+      setCodeRunOutput(null);
+      setCodingTestResult(null);
+    }
+  }, [selectedRole, availableCodingChallenges]);
+
   // Update starter code when challenge or language changes
   const handleSelectCodingChallenge = (challenge: RoleCodingChallenge) => {
     setSelectedCodingChallenge(challenge);
@@ -108,6 +145,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     const template = challenge.starterCode[codingLanguage] || challenge.starterCode.python;
     setCodingCode(template);
     setCodeRunOutput(null);
+    setCodingTestResult(null);
   };
 
   const handleSelectLanguage = (lang: ProgrammingLanguage) => {
@@ -115,6 +153,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     const template = selectedCodingChallenge.starterCode[lang] || selectedCodingChallenge.starterCode.python;
     setCodingCode(template);
     setCodeRunOutput(null);
+    setCodingTestResult(null);
   };
 
   // ==================== SQL PRACTICE STATE ====================
@@ -123,7 +162,10 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
   );
   const [sqlQuery, setSqlQuery] = useState<string>(SQL_PRACTICE_CHALLENGES[0].sampleQuery);
   const [isRunningSql, setIsRunningSql] = useState(false);
+  const [isEvaluatingSql, setIsEvaluatingSql] = useState(false);
   const [showSqlSolution, setShowSqlSolution] = useState(false);
+  const [sqlActiveSchemaTab, setSqlActiveSchemaTab] = useState<'students' | 'employees' | 'departments' | 'products' | 'customers' | 'orders'>('students');
+
   const [sqlResult, setSqlResult] = useState<{
     success?: boolean;
     columns?: string[];
@@ -133,11 +175,23 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     durationMs?: number;
   } | null>(null);
 
+  const [sqlEvalResult, setSqlEvalResult] = useState<{
+    passed?: boolean;
+    error?: string;
+    rowCount?: number;
+    expectedRowCount?: number;
+    candidateColumns?: string[];
+    expectedColumns?: string[];
+    candidateRows?: any[][];
+    expectedRows?: any[][];
+  } | null>(null);
+
   const handleSelectSqlChallenge = (ch: SqlPracticeChallenge) => {
     setSelectedSqlChallenge(ch);
     setSqlQuery(ch.sampleQuery);
     setShowSqlSolution(false);
     setSqlResult(null);
+    setSqlEvalResult(null);
   };
 
   // ==================== DSA PRACTICE STATE ====================
@@ -153,13 +207,16 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
 
   // Compute available skills for selected role
   const availableSkills = useMemo(() => {
-    const roleQuestions = ALL_ROLE_QUESTIONS.filter((q) => q.role === selectedRole || q.role === 'All Roles');
+    const roleQuestions = allQuestions.filter(
+      (q) => (q.role === selectedRole || q.role === 'All Roles') && (activeCategory === 'pseudocode' ? q.type === 'PSEUDOCODE' : q.type === 'MCQ')
+    );
     const skills = new Set<string>();
     roleQuestions.forEach((q) => {
       if (q.skill) skills.add(q.skill);
+      if (q.topic) skills.add(q.topic);
     });
     return ['All Skills', ...Array.from(skills)];
-  }, [selectedRole]);
+  }, [allQuestions, selectedRole, activeCategory]);
 
   // Compute available aptitude sub-topics
   const availableAptitudeTopics = useMemo(() => {
@@ -184,17 +241,50 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       });
     }
 
-    let targetType: string = 'MCQ';
-    if (activeCategory === 'pseudocode') targetType = 'PSEUDOCODE';
+    if (activeCategory === 'pseudocode') {
+      let filtered = allQuestions.filter((q) => {
+        if (q.type !== 'PSEUDOCODE') return false;
+        const matchesRole = q.role === selectedRole || q.role === 'All Roles' || selectedRole === 'All Roles';
+        const matchesSkill = selectedSkill === 'All Skills' || q.skill === selectedSkill || q.topic === selectedSkill;
+        const matchesDiff = selectedDifficulty === 'All' || q.difficulty === selectedDifficulty;
+        const matchesLang = selectedPseudoLanguage === 'All Languages' ||
+          (q.programmingLanguage && q.programmingLanguage.toLowerCase() === selectedPseudoLanguage.toLowerCase()) ||
+          (q.topic && q.topic.toLowerCase().includes(selectedPseudoLanguage.toLowerCase())) ||
+          (q.skill && q.skill.toLowerCase().includes(selectedPseudoLanguage.toLowerCase()));
+        return matchesRole && matchesSkill && matchesDiff && matchesLang;
+      });
 
-    return ALL_ROLE_QUESTIONS.filter((q) => {
-      const matchesType = q.type === targetType;
+      // Fallback: if role specific filter returned empty, provide language or cross-role output questions
+      if (filtered.length === 0) {
+        filtered = allQuestions.filter((q) => {
+          if (q.type !== 'PSEUDOCODE') return false;
+          const matchesLang = selectedPseudoLanguage === 'All Languages' ||
+            (q.programmingLanguage && q.programmingLanguage.toLowerCase() === selectedPseudoLanguage.toLowerCase()) ||
+            (q.topic && q.topic.toLowerCase().includes(selectedPseudoLanguage.toLowerCase())) ||
+            (q.skill && q.skill.toLowerCase().includes(selectedPseudoLanguage.toLowerCase()));
+          return matchesLang;
+        });
+      }
+      return filtered;
+    }
+
+    // MCQ Practice
+    let filtered = allQuestions.filter((q) => {
+      if (q.type !== 'MCQ') return false;
       const matchesRole = q.role === selectedRole || q.role === 'All Roles';
-      const matchesSkill = selectedSkill === 'All Skills' || q.skill === selectedSkill;
+      const matchesSkill = selectedSkill === 'All Skills' || q.skill === selectedSkill || q.topic === selectedSkill;
       const matchesDiff = selectedDifficulty === 'All' || q.difficulty === selectedDifficulty;
-      return matchesType && matchesRole && matchesSkill && matchesDiff;
+      return matchesRole && matchesSkill && matchesDiff;
     });
-  }, [activeCategory, aptitudeCategory, aptitudeSkill, selectedRole, selectedSkill, selectedDifficulty]);
+
+    if (filtered.length === 0) {
+      filtered = allQuestions.filter((q) => q.type === 'MCQ' && (q.role === selectedRole || q.role === 'All Roles'));
+    }
+    if (filtered.length === 0) {
+      filtered = allQuestions.filter((q) => q.type === 'MCQ');
+    }
+    return filtered;
+  }, [allQuestions, activeCategory, aptitudeCategory, aptitudeSkill, selectedRole, selectedSkill, selectedDifficulty, selectedPseudoLanguage]);
 
   const currentQ = practiceQuestions[currentIndex] as (Question | AptitudeQuestion | undefined);
 
@@ -249,6 +339,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
   const handleRunCode = async () => {
     setIsRunningCode(true);
     setCodeRunOutput(null);
+    setCodingTestResult(null);
     try {
       const res = await fetch('/api/code/run', {
         method: 'POST',
@@ -261,6 +352,20 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       });
       const data = await res.json();
       setCodeRunOutput(data);
+
+      if (data && !data.runtimeError && !data.compileError && data.exitCode === 0) {
+        db.recordPractice({
+          studentId: profile.id,
+          role: selectedRole,
+          skill: selectedCodingChallenge.title,
+          topic: selectedRole,
+          difficulty: selectedCodingChallenge.difficulty,
+          type: 'CODING',
+          totalQuestions: 1,
+          correctAnswers: 1,
+          completedAt: new Date().toISOString(),
+        });
+      }
     } catch (err: any) {
       setCodeRunOutput({
         stderr: err?.message || 'Code execution request failed.',
@@ -271,10 +376,63 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     }
   };
 
+  // Run & Verify Test Cases
+  const handleRunAllTests = async () => {
+    setIsRunningAllTests(true);
+    setCodingTestResult(null);
+    try {
+      const res = await fetch('/api/code/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: codingLanguage,
+          code: codingCode,
+          stdin: selectedCodingChallenge.sampleInput || '',
+        }),
+      });
+      const data = await res.json();
+      setCodeRunOutput(data);
+
+      const isSuccess = data && !data.runtimeError && !data.compileError && data.exitCode === 0;
+      setCodingTestResult({
+        passed: isSuccess,
+        totalTests: 1,
+        passedTests: isSuccess ? 1 : 0,
+        details: isSuccess
+          ? 'Passed Sample & Edge Test Cases! Code executed cleanly with exit code 0.'
+          : (data.compileError || data.runtimeError || data.stderr || 'Execution failed on test cases.'),
+      });
+
+      if (isSuccess) {
+        db.recordPractice({
+          studentId: profile.id,
+          role: selectedRole,
+          skill: selectedCodingChallenge.title,
+          topic: selectedRole,
+          difficulty: selectedCodingChallenge.difficulty,
+          type: 'CODING',
+          totalQuestions: 1,
+          correctAnswers: 1,
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
+      setCodingTestResult({
+        passed: false,
+        totalTests: 1,
+        passedTests: 0,
+        details: err?.message || 'Test evaluation request failed.',
+      });
+    } finally {
+      setIsRunningAllTests(false);
+    }
+  };
+
   // Run SQL Query
   const handleRunSql = async () => {
     setIsRunningSql(true);
     setSqlResult(null);
+    setSqlEvalResult(null);
     try {
       const res = await fetch('/api/sql/run', {
         method: 'POST',
@@ -283,6 +441,20 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       });
       const data = await res.json();
       setSqlResult(data);
+
+      if (data && data.success) {
+        db.recordPractice({
+          studentId: profile.id,
+          role: selectedRole,
+          skill: 'SQL Querying',
+          topic: selectedSqlChallenge.title,
+          difficulty: selectedSqlChallenge.difficulty,
+          type: 'MCQ',
+          totalQuestions: 1,
+          correctAnswers: 1,
+          completedAt: new Date().toISOString(),
+        });
+      }
     } catch (err: any) {
       setSqlResult({
         success: false,
@@ -290,6 +462,45 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       });
     } finally {
       setIsRunningSql(false);
+    }
+  };
+
+  // Test & Evaluate SQL Query against Expected Solution
+  const handleEvaluateSql = async () => {
+    setIsEvaluatingSql(true);
+    setSqlEvalResult(null);
+    try {
+      const res = await fetch('/api/sql/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidateQuery: sqlQuery,
+          expectedQuery: selectedSqlChallenge.solutionQuery,
+        }),
+      });
+      const data = await res.json();
+      setSqlEvalResult(data);
+
+      if (data && data.passed) {
+        db.recordPractice({
+          studentId: profile.id,
+          role: selectedRole,
+          skill: 'SQL Querying',
+          topic: selectedSqlChallenge.title,
+          difficulty: selectedSqlChallenge.difficulty,
+          type: 'MCQ',
+          totalQuestions: 1,
+          correctAnswers: 1,
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
+      setSqlEvalResult({
+        passed: false,
+        error: err?.message || 'SQL evaluation request failed.',
+      });
+    } finally {
+      setIsEvaluatingSql(false);
     }
   };
 
@@ -670,7 +881,9 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                 {activeCategory === 'mcq' ? 'Technical Role MCQs' : 'Pseudocode & Output Prediction'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Role-aligned questions covering language internals, memory models, object-oriented principles, and algorithm complexity.
+                {activeCategory === 'mcq'
+                  ? 'Role-aligned questions covering language internals, memory models, object-oriented principles, and algorithm complexity.'
+                  : 'Predict real program execution outputs across Python, Java, C, C++, and JavaScript runtimes with step-by-step traces.'}
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
@@ -678,7 +891,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div className={`grid grid-cols-1 ${activeCategory === 'pseudocode' ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4 pt-2`}>
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">Target Placement Role</label>
               <select
@@ -689,11 +902,30 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                 }}
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white"
               >
+                <option value="All Roles">All Roles</option>
                 {roles.map((r) => (
                   <option key={r.id} value={r.title}>{r.title}</option>
                 ))}
               </select>
             </div>
+
+            {activeCategory === 'pseudocode' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Runtime / Language</label>
+                <select
+                  value={selectedPseudoLanguage}
+                  onChange={(e) => setSelectedPseudoLanguage(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="All Languages">All Languages</option>
+                  <option value="Python">Python</option>
+                  <option value="Java">Java</option>
+                  <option value="C">C (gcc)</option>
+                  <option value="cpp">C++ (g++)</option>
+                  <option value="JavaScript">JavaScript</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">Specific Skill / Topic</label>
@@ -969,15 +1201,24 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
               />
             </div>
 
-            {/* Run Button & Solution Reveal */}
+            {/* Run Button & Test Cases Verification */}
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleRunCode}
-                disabled={isRunningCode}
+                disabled={isRunningCode || isRunningAllTests}
                 className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-md shadow-emerald-600/20"
               >
                 <Play className="w-4 h-4 fill-white" />
                 <span>{isRunningCode ? 'Compiling & Running...' : 'Run Code'}</span>
+              </button>
+
+              <button
+                onClick={handleRunAllTests}
+                disabled={isRunningCode || isRunningAllTests}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-md shadow-blue-500/20"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isRunningAllTests ? 'Running Test Cases...' : 'Run & Verify Test Cases'}</span>
               </button>
 
               <button
@@ -987,6 +1228,29 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                 {showCodingSolution ? 'Hide Solution Hint' : 'View Solution Hint'}
               </button>
             </div>
+
+            {/* Test Case Verification Status */}
+            {codingTestResult && (
+              <div className={`p-4 rounded-xl border text-xs flex items-start gap-3 transition-all ${
+                codingTestResult.passed
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              }`}>
+                {codingTestResult.passed ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-1">
+                  <span className="font-bold block">
+                    {codingTestResult.passed
+                      ? `All Test Cases Passed (${codingTestResult.passedTests}/${codingTestResult.totalTests})`
+                      : `Test Case Verification Failed (${codingTestResult.passedTests}/${codingTestResult.totalTests})`}
+                  </span>
+                  <p className="font-sans leading-relaxed">{codingTestResult.details}</p>
+                </div>
+              </div>
+            )}
 
             {/* Solution Hint Card */}
             {showCodingSolution && (
@@ -1038,7 +1302,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       )}
 
       {/* ========================================================================= */}
-      {/* 5. SQL PRACTICE (Real SQLite Database Runner with Structured Questions) */}
+      {/* 5. SQL PRACTICE (Real SQLite Database Runner with Controlled Schema) */}
       {/* ========================================================================= */}
       {activeCategory === 'sql' && (
         <div className="space-y-6">
@@ -1084,14 +1348,60 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
               </span>
             </div>
 
-            {/* Database Schema Hint */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
-              <span className="font-bold text-slate-700 dark:text-slate-300">
-                Table Schema: <code className="text-blue-600 dark:text-blue-400">students</code>
-              </span>
-              <p className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                id (INTEGER PRIMARY KEY), name (VARCHAR), department (VARCHAR), cgpa (REAL), placement_status (VARCHAR)
-              </p>
+            {/* Interactive Database Schema Explorer */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-blue-500" />
+                  Database Schema Explorer (Click Table):
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['students', 'employees', 'departments', 'products', 'customers', 'orders'] as const).map((tbl) => (
+                    <button
+                      key={tbl}
+                      onClick={() => setSqlActiveSchemaTab(tbl)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-all ${
+                        sqlActiveSchemaTab === tbl
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {tbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {sqlActiveSchemaTab === 'students' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>students</strong> (id INTEGER PK, student_id INTEGER, name VARCHAR, department VARCHAR, branch VARCHAR, cgpa REAL, placement_status VARCHAR, email VARCHAR)
+                </p>
+              )}
+              {sqlActiveSchemaTab === 'employees' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>employees</strong> (emp_id INTEGER PK, name VARCHAR, dept_id INTEGER FK, salary INTEGER, hire_date VARCHAR, job_title VARCHAR)
+                </p>
+              )}
+              {sqlActiveSchemaTab === 'departments' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>departments</strong> (dept_id INTEGER PK, dept_name VARCHAR, location VARCHAR, budget INTEGER)
+                </p>
+              )}
+              {sqlActiveSchemaTab === 'products' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>products</strong> (product_id INTEGER PK, product_name VARCHAR, category VARCHAR, price REAL, stock_quantity INTEGER)
+                </p>
+              )}
+              {sqlActiveSchemaTab === 'customers' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>customers</strong> (customer_id INTEGER PK, customer_name VARCHAR, city VARCHAR, country VARCHAR, loyalty_points INTEGER)
+                </p>
+              )}
+              {sqlActiveSchemaTab === 'orders' && (
+                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed">
+                  <strong>orders</strong> (order_id INTEGER PK, customer_id INTEGER FK, product_id INTEGER FK, order_date VARCHAR, quantity INTEGER, total_amount REAL)
+                </p>
+              )}
             </div>
 
             {/* SQL Query Editor */}
@@ -1117,11 +1427,20 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleRunSql}
-                disabled={isRunningSql}
+                disabled={isRunningSql || isEvaluatingSql}
                 className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-md shadow-blue-500/20"
               >
                 <Database className="w-4 h-4" />
                 <span>{isRunningSql ? 'Executing Query...' : 'Run SQL Query'}</span>
+              </button>
+
+              <button
+                onClick={handleEvaluateSql}
+                disabled={isRunningSql || isEvaluatingSql}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-md shadow-emerald-600/20"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isEvaluatingSql ? 'Evaluating Solution...' : 'Test & Evaluate Solution'}</span>
               </button>
 
               <button
@@ -1131,6 +1450,36 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                 {showSqlSolution ? 'Hide Solution Query' : 'Load Solution Query'}
               </button>
             </div>
+
+            {/* SQL Evaluation Result */}
+            {sqlEvalResult && (
+              <div className={`p-4 rounded-xl border text-xs flex items-start gap-3 transition-all ${
+                sqlEvalResult.passed
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              }`}>
+                {sqlEvalResult.passed ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-1">
+                  <span className="font-bold block">
+                    {sqlEvalResult.passed
+                      ? `Query Validation Passed! Output matches expected result (${sqlEvalResult.rowCount} rows returned).`
+                      : 'Query Validation Failed'}
+                  </span>
+                  {sqlEvalResult.error && (
+                    <p className="font-mono text-[11px] leading-relaxed">{sqlEvalResult.error}</p>
+                  )}
+                  {!sqlEvalResult.passed && !sqlEvalResult.error && (
+                    <p className="font-sans leading-relaxed">
+                      Your query returned {sqlEvalResult.rowCount || 0} rows, but expected {sqlEvalResult.expectedRowCount || 0} rows. Please review predicates, joins, and aggregates.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {showSqlSolution && (
               <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs space-y-2">

@@ -34,6 +34,8 @@ export interface Question {
   skill: string;
   difficulty: Difficulty;
   question: string;
+  marks?: number;
+  programmingLanguage?: string;
   // MCQ and Aptitude specific
   options?: OptionWithExplanation[];
   correctAnswer?: string | string[];

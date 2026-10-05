@@ -1,4 +1,5 @@
 import { Question } from '../types';
+import { PRACTICE_QUESTION_BANK } from './practiceQuestionBank';
 
 export const ADDITIONAL_ROLE_QUESTIONS: Question[] = [
   // ==================== JAVA DEVELOPER ====================
@@ -336,4 +337,7 @@ def euclidean_distance(p1, p2):
   },
 ];
 
-export const ALL_ROLE_QUESTIONS = ADDITIONAL_ROLE_QUESTIONS;
+export const ALL_ROLE_QUESTIONS = [
+  ...ADDITIONAL_ROLE_QUESTIONS,
+  ...PRACTICE_QUESTION_BANK,
+];

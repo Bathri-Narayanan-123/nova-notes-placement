@@ -716,13 +716,14 @@ try:
     CREATE TABLE departments (
         dept_id INTEGER PRIMARY KEY,
         dept_name TEXT NOT NULL,
-        location TEXT
+        location TEXT,
+        budget INTEGER
     );
     INSERT INTO departments VALUES 
-        (1, 'Engineering', 'Bangalore'),
-        (2, 'Data Science', 'Hyderabad'),
-        (3, 'Product', 'Pune'),
-        (4, 'Quality Assurance', 'Chennai');
+        (1, 'Engineering', 'Bangalore', 5000000),
+        (2, 'Data Science', 'Hyderabad', 4200000),
+        (3, 'Product', 'Pune', 3100000),
+        (4, 'Quality Assurance', 'Chennai', 2400000);
 
     CREATE TABLE employees (
         emp_id INTEGER PRIMARY KEY,
@@ -730,29 +731,83 @@ try:
         dept_id INTEGER,
         salary INTEGER,
         hire_date TEXT,
+        job_title TEXT,
         FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
     );
     INSERT INTO employees VALUES
-        (101, 'Aarav Patel', 1, 85000, '2022-01-15'),
-        (102, 'Diya Sharma', 2, 92000, '2021-06-20'),
-        (103, 'Rohan Verma', 1, 78000, '2023-03-10'),
-        (104, 'Ananya Iyer', 3, 95000, '2020-11-01'),
-        (105, 'Karthik Rao', 4, 65000, '2022-08-14'),
-        (106, 'Pooja Nair', 2, 88000, '2023-01-05');
+        (101, 'Aarav Patel', 1, 85000, '2022-01-15', 'Backend Engineer'),
+        (102, 'Diya Sharma', 2, 92000, '2021-06-20', 'Data Scientist'),
+        (103, 'Rohan Verma', 1, 78000, '2023-03-10', 'Full Stack Developer'),
+        (104, 'Ananya Iyer', 3, 95000, '2020-11-01', 'Product Manager'),
+        (105, 'Karthik Rao', 4, 65000, '2022-08-14', 'QA Engineer'),
+        (106, 'Pooja Nair', 2, 88000, '2023-01-05', 'ML Engineer'),
+        (107, 'Vikram Singh', 1, 105000, '2019-04-12', 'Principal Architect');
 
     CREATE TABLE students (
-        student_id INTEGER PRIMARY KEY,
+        id INTEGER PRIMARY KEY,
+        student_id INTEGER,
         name TEXT NOT NULL,
+        department TEXT,
         branch TEXT,
         cgpa REAL,
-        placement_status TEXT
+        placement_status TEXT,
+        email TEXT
     );
     INSERT INTO students VALUES
-        (1, 'Vikram Malhotra', 'CSE', 8.9, 'Placed'),
-        (2, 'Sneha Joshi', 'IT', 8.2, 'Placed'),
-        (3, 'Rahul Sen', 'ECE', 7.4, 'Eligible'),
-        (4, 'Meera Nambiar', 'CSE', 9.4, 'Placed'),
-        (5, 'Aditya Roy', 'EEE', 6.8, 'In Training');
+        (1, 1, 'Vikram Malhotra', 'CSE', 'CSE', 8.9, 'Placed', 'vikram@example.com'),
+        (2, 2, 'Sneha Joshi', 'IT', 'IT', 8.2, 'Placed', 'sneha@example.com'),
+        (3, 3, 'Rahul Sen', 'ECE', 'ECE', 7.4, 'Eligible', 'rahul@example.com'),
+        (4, 4, 'Meera Nambiar', 'CSE', 'CSE', 9.4, 'Placed', 'meera@example.com'),
+        (5, 5, 'Aditya Roy', 'EEE', 'EEE', 6.8, 'In Training', 'aditya@example.com'),
+        (6, 6, 'Priya Kulkarni', 'CSE', 'CSE', 9.1, 'Placed', 'priya@example.com'),
+        (7, 7, 'Tanmay Bhat', 'IT', 'IT', 7.8, 'Eligible', 'tanmay@example.com');
+
+    CREATE TABLE products (
+        product_id INTEGER PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        price REAL NOT NULL,
+        stock_quantity INTEGER NOT NULL
+    );
+    INSERT INTO products VALUES
+        (201, 'Laptop Pro 15', 'Electronics', 1200.0, 45),
+        (202, 'Wireless Mouse', 'Electronics', 25.5, 200),
+        (203, 'Mechanical Keyboard', 'Electronics', 85.0, 110),
+        (204, 'Office Desk Chair', 'Furniture', 180.0, 60),
+        (205, 'Standing Desk', 'Furniture', 350.0, 25),
+        (206, 'USB-C Monitor 27"', 'Electronics', 280.0, 75);
+
+    CREATE TABLE customers (
+        customer_id INTEGER PRIMARY KEY,
+        customer_name TEXT NOT NULL,
+        city TEXT NOT NULL,
+        country TEXT NOT NULL,
+        loyalty_points INTEGER DEFAULT 0
+    );
+    INSERT INTO customers VALUES
+        (301, 'TechCorp India', 'Bangalore', 'India', 450),
+        (302, 'Global Innovations', 'San Francisco', 'USA', 1200),
+        (303, 'Nexus Analytics', 'London', 'UK', 780),
+        (304, 'Apex Solutions', 'Singapore', 'Singapore', 320),
+        (305, 'Alpha Enterprises', 'Hyderabad', 'India', 90);
+
+    CREATE TABLE orders (
+        order_id INTEGER PRIMARY KEY,
+        customer_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        order_date TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        total_amount REAL NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+        FOREIGN KEY (product_id) REFERENCES products(product_id)
+    );
+    INSERT INTO orders VALUES
+        (401, 301, 201, '2024-01-10', 5, 6000.0),
+        (402, 302, 203, '2024-01-12', 10, 850.0),
+        (403, 303, 206, '2024-01-15', 3, 840.0),
+        (404, 301, 202, '2024-01-18', 20, 510.0),
+        (405, 304, 205, '2024-02-01', 2, 700.0),
+        (406, 302, 201, '2024-02-05', 3, 3600.0);
     ''')
 
     user_query = sys.stdin.read().strip()
@@ -812,12 +867,24 @@ app.post('/api/code/run', async (req, res) => {
   }
 });
 
-// Dedicated SQL Query Run Endpoint
+// Dedicated SQL Query Run Endpoint with Safety Protection
 app.post('/api/sql/run', async (req, res) => {
   try {
     const { query = '' } = req.body;
     if (!query || typeof query !== 'string') {
       return res.status(400).json({ error: 'SQL query is required' });
+    }
+
+    // Security check: Block destructive SQL operations
+    const upper = query.toUpperCase();
+    const dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'ALTER', 'TRUNCATE', 'ATTACH', 'DETACH', 'PRAGMA'];
+    const foundDangerous = dangerousKeywords.find((k) => new RegExp(`\\b${k}\\b`, 'i').test(upper));
+    if (foundDangerous) {
+      return res.json({
+        success: false,
+        error: `Security Policy Violation: Destructive statement '${foundDangerous}' is blocked. Nova Notes assessment only permits safe queries (SELECT, JOIN, WHERE, GROUP BY, HAVING, ORDER BY).`,
+        durationMs: 0,
+      });
     }
 
     const result = await runMultiLanguageCode('sql', query, '', 3000);
@@ -849,6 +916,82 @@ app.post('/api/sql/run', async (req, res) => {
   } catch (error: any) {
     console.error('SQL query error:', error);
     res.status(500).json({ error: 'SQL execution failed', details: error?.message });
+  }
+});
+
+// Dedicated SQL Query Evaluation endpoint (compares candidate query output with expected solution)
+app.post('/api/sql/evaluate', async (req, res) => {
+  try {
+    const { candidateQuery = '', expectedQuery = '', expectedOutput = '' } = req.body;
+
+    if (!candidateQuery || typeof candidateQuery !== 'string') {
+      return res.status(400).json({ error: 'Candidate SQL query is required' });
+    }
+
+    // Security check
+    const upper = candidateQuery.toUpperCase();
+    const dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'ALTER', 'TRUNCATE', 'ATTACH', 'DETACH', 'PRAGMA'];
+    const foundDangerous = dangerousKeywords.find((k) => new RegExp(`\\b${k}\\b`, 'i').test(upper));
+    if (foundDangerous) {
+      return res.json({
+        passed: false,
+        error: `Security Policy Violation: Forbidden keyword '${foundDangerous}'.`,
+      });
+    }
+
+    // Run candidate query
+    const candResult = await runMultiLanguageCode('sql', candidateQuery, '', 3000);
+    if (candResult.exitCode !== 0) {
+      return res.json({
+        passed: false,
+        error: candResult.stderr || 'Query failed to execute',
+        durationMs: candResult.durationMs,
+      });
+    }
+
+    let candData: any = {};
+    try {
+      candData = JSON.parse(candResult.stdout || '{}');
+    } catch {
+      return res.json({
+        passed: false,
+        error: 'Unable to parse SQL output',
+      });
+    }
+
+    // If expected query is supplied, run expected query and compare rows
+    if (expectedQuery) {
+      const expResult = await runMultiLanguageCode('sql', expectedQuery, '', 3000);
+      if (expResult.exitCode === 0) {
+        try {
+          const expData = JSON.parse(expResult.stdout || '{}');
+          const candNorm = JSON.stringify(candData.rows || []);
+          const expNorm = JSON.stringify(expData.rows || []);
+          const passed = candNorm === expNorm;
+
+          return res.json({
+            passed,
+            candidateRows: candData.rows || [],
+            candidateColumns: candData.columns || [],
+            expectedRows: expData.rows || [],
+            expectedColumns: expData.columns || [],
+            durationMs: candResult.durationMs,
+          });
+        } catch {}
+      }
+    }
+
+    // Otherwise check row count or expected output string match
+    const passed = (candData.rowCount || 0) > 0 && (!expectedOutput || candResult.stdout.includes(expectedOutput));
+    res.json({
+      passed,
+      candidateRows: candData.rows || [],
+      candidateColumns: candData.columns || [],
+      durationMs: candResult.durationMs,
+    });
+  } catch (error: any) {
+    console.error('SQL evaluation error:', error);
+    res.status(500).json({ error: 'SQL evaluation failed', details: error?.message });
   }
 });
 

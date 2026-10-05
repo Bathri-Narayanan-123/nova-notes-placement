@@ -1,6 +1,7 @@
 import { Question } from '../types';
 import { APTITUDE_QUESTION_BANK } from './aptitudeBank';
 import { ADDITIONAL_ROLE_QUESTIONS } from './roleQuestions';
+import { PRACTICE_QUESTION_BANK } from './practiceQuestionBank';
 
 const CORE_QUESTION_BANK: Question[] = [
   // ==================== PYTHON DEVELOPER: MCQs ====================
@@ -848,6 +849,7 @@ Recall = TP / (TP + FN) = 40 / (40 + 10) = 40 / 50 = 0.8 (or 80%).`,
 export const INITIAL_QUESTION_BANK: Question[] = [
   ...CORE_QUESTION_BANK,
   ...ADDITIONAL_ROLE_QUESTIONS,
+  ...PRACTICE_QUESTION_BANK,
   ...APTITUDE_QUESTION_BANK,
 ];
 

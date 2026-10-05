@@ -178,7 +178,7 @@ export const MyPlacementView: React.FC<MyPlacementViewProps> = ({
               {latestAttempt ? 'Start Adaptive Reattempt' : 'Start Assessment'}
             </button>
             <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-              10 Role MCQ · 8 DSA · 10 Aptitude · 7 Output · 4 Coding (39 Questions)
+              15 Technical MCQ · 10 Aptitude &amp; Logic · 10 Pseudocode · 4 Coding &amp; SQL (39 Tasks)
             </p>
           </div>
         </div>

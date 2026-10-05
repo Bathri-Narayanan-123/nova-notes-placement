@@ -33,7 +33,18 @@ function checkIsAdminRoute(): boolean {
 }
 
 function AppContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const session = localStorage.getItem('nova_notes_auth_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          return !!parsed.isAuthenticated;
+        }
+      } catch {}
+    }
+    return false;
+  });
   const [isAdminPath, setIsAdminPath] = useState(checkIsAdminRoute);
   const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     if (typeof window !== 'undefined') {
@@ -93,6 +104,14 @@ function AppContent() {
   const handleLoginSuccess = (userProfile: UserProfile, targetRole: 'student' | 'admin') => {
     setProfile(userProfile);
     setIsAuthenticated(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nova_notes_auth_session', JSON.stringify({
+        isAuthenticated: true,
+        email: userProfile.email,
+        role: targetRole,
+        timestamp: Date.now()
+      }));
+    }
     if (targetRole === 'admin' || userProfile.role === 'admin') {
       setIsAdminPath(true);
       if (typeof window !== 'undefined') {
@@ -108,6 +127,14 @@ function AppContent() {
     setProfile(userProfile);
     setIsAuthenticated(true);
     setIsAdminPath(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nova_notes_auth_session', JSON.stringify({
+        isAuthenticated: true,
+        email: userProfile.email,
+        role: 'admin',
+        timestamp: Date.now()
+      }));
+    }
   };
 
   const handleReturnToStudent = () => {
@@ -129,6 +156,9 @@ function AppContent() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('nova_notes_auth_session');
+    }
     db.updateProfile({ role: 'student' });
     setActiveTab('dashboard');
     if (typeof window !== 'undefined') {
