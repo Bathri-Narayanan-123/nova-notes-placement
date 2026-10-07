@@ -1,0 +1,84 @@
+{
+  "usr_admin_101": {
+    "id": "usr_admin_101",
+    "email": "bathrinarayanan53@gmail.com",
+    "fullName": "Bathri Narayanan S",
+    "role": "admin",
+    "selectedRole": "Python Developer",
+    "college": "Nova Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "8/22/2026",
+    "placementReadiness": 88,
+    "sessionsCount": 65,
+    "activeTimeMinutes": 45,
+    "practiceMinutes": 30,
+    "assessmentMinutes": 40,
+    "interviewMinutes": 25,
+    "practiceQuestionsCount": 42,
+    "assessmentStatus": "Qualified (85%)",
+    "interviewStatus": "unlocked",
+    "strongSkills": [
+      "Python",
+      "System Architecture",
+      "DSA"
+    ],
+    "needsImprovement": [
+      "SQL Optimization"
+    ],
+    "updatedAt": "2026-10-07T04:32:14.771Z"
+  },
+  "usr_student_102": {
+    "id": "usr_student_102",
+    "email": "student.candidate@novanotes.edu",
+    "fullName": "Placement Candidate",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "Engineering Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "9/01/2026",
+    "placementReadiness": 32,
+    "sessionsCount": 12,
+    "activeTimeMinutes": 15,
+    "practiceMinutes": 20,
+    "assessmentMinutes": 30,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 25,
+    "assessmentStatus": "2% In Progress",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [
+      "Python",
+      "OOP",
+      "DSA",
+      "SQL"
+    ],
+    "updatedAt": "2026-10-07T04:32:14.845Z"
+  },
+  "usr_1791347559186_nxn68": {
+    "id": "usr_1791347559186_nxn68",
+    "email": "bathri.test@gmail.com",
+    "fullName": "Bathri Narayanan S",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "Engineering Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "10/7/2026",
+    "placementReadiness": 25,
+    "sessionsCount": 1,
+    "activeTimeMinutes": 0,
+    "practiceMinutes": 0,
+    "assessmentMinutes": 0,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 0,
+    "dsaSolvedCount": 0,
+    "assessmentStatus": "Not Started",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [
+      "Python",
+      "DSA",
+      "OOP"
+    ],
+    "updatedAt": "2026-10-07T04:32:57.350Z"
+  }
+}

@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { INITIAL_QUESTION_BANK } from '../data/questionBank';
 import { PLACEMENT_ROLES } from '../data/roles';
+import { INITIAL_5_DSA_PROBLEMS, DsaProblemItem, DsaUserProgress } from '../data/dsaStarterBank';
 
 const STORAGE_KEYS = {
   PROFILE: 'nova_notes_profile',
@@ -19,6 +20,7 @@ const STORAGE_KEYS = {
   ROLES: 'nova_notes_roles',
   CONFIG: 'nova_notes_config',
   ATTEMPTED_QUESTION_IDS: 'nova_notes_attempted_qids',
+  DSA_PROGRESS: 'nova_notes_dsa_progress',
 };
 
 // Initial Student Profile matching screenshots
@@ -255,7 +257,15 @@ class DatabaseService {
   public getProfile(): UserProfile {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.PROFILE);
-      return data ? JSON.parse(data) : DEFAULT_PROFILE;
+      const currentTheme = (localStorage.getItem('nova_notes_theme') as 'light' | 'dark') || 'light';
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (!parsed.themePreference) {
+          parsed.themePreference = currentTheme;
+        }
+        return parsed;
+      }
+      return { ...DEFAULT_PROFILE, themePreference: currentTheme };
     } catch {
       return DEFAULT_PROFILE;
     }
@@ -264,7 +274,22 @@ class DatabaseService {
   public updateProfile(updates: Partial<UserProfile>): UserProfile {
     const current = this.getProfile();
     const updated = { ...current, ...updates };
+    if (updates.themePreference) {
+      localStorage.setItem('nova_notes_theme', updates.themePreference);
+    }
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
+
+    // Background sync to backend if user is authenticated
+    if (typeof window !== 'undefined' && updated.id) {
+      try {
+        fetch('/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        }).catch(() => {});
+      } catch {}
+    }
+
     this.notify();
     return updated;
   }
@@ -883,6 +908,75 @@ PRINT compute(3)`,
     roles.push(role);
     localStorage.setItem(STORAGE_KEYS.ROLES, JSON.stringify(roles));
     this.notify();
+  }
+
+  // ==================== DATA STRUCTURES & ALGORITHMS (DSA) ====================
+  public getDsaProblems(): DsaProblemItem[] {
+    return INITIAL_5_DSA_PROBLEMS;
+  }
+
+  public getDsaProgress(): Record<string, DsaUserProgress> {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.DSA_PROGRESS);
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  public updateDsaProgress(
+    problemId: string,
+    updates: Partial<DsaUserProgress>
+  ): DsaUserProgress {
+    const progressMap = this.getDsaProgress();
+    const current: DsaUserProgress = progressMap[problemId] || {
+      problemId,
+      status: 'Not Started',
+      attemptsCount: 0,
+      successfulSubmissions: 0,
+    };
+
+    const updated: DsaUserProgress = {
+      ...current,
+      ...updates,
+      problemId,
+      lastAttemptedAt: updates.lastAttemptedAt || new Date().toLocaleDateString('en-US', {
+        month: 'numeric',
+        day: 'numeric',
+        year: 'numeric'
+      }),
+    };
+
+    progressMap[problemId] = updated;
+    localStorage.setItem(STORAGE_KEYS.DSA_PROGRESS, JSON.stringify(progressMap));
+
+    // Update solved count in user profile
+    const solvedCount = Object.values(progressMap).filter((p) => p.status === 'Solved').length;
+    this.updateProfile({ dsaSolvedCount: solvedCount });
+
+    // Background sync to backend API if available
+    if (typeof window !== 'undefined') {
+      try {
+        fetch('/api/dsa/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ problemId, ...updated }),
+        }).catch(() => {});
+      } catch {}
+    }
+
+    this.notify();
+    return updated;
+  }
+
+  public getDsaSummary(): { total: number; solved: number; attempted: number } {
+    const progressMap = this.getDsaProgress();
+    const total = INITIAL_5_DSA_PROBLEMS.length;
+    const progressList = Object.values(progressMap);
+    const solved = progressList.filter((p) => p.status === 'Solved').length;
+    const attempted = progressList.filter((p) => p.status === 'Attempted' || p.status === 'Solved').length;
+
+    return { total, solved, attempted };
   }
 }
 

@@ -274,7 +274,7 @@ function AppContent() {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-500" />
             <span>
-              Signed in as <strong className="text-slate-900 dark:text-white font-semibold">{profile.fullName || profile.email}</strong> &bull; Candidate Track: <strong className="text-blue-600 dark:text-blue-400">{profile.selectedRole}</strong>
+              Signed in as <strong className="text-slate-900 dark:text-white font-semibold">{profile.fullName || 'Placement Candidate'}</strong> &bull; Candidate Track: <strong className="text-blue-600 dark:text-blue-400">{profile.selectedRole}</strong>
             </span>
           </div>
           <div className="flex items-center gap-3">

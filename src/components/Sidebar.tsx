@@ -108,45 +108,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom section: Theme toggle, Profile, Logout */}
       <div className="p-3 border-t border-slate-100 dark:border-slate-800/60 space-y-3">
-        {/* Theme switcher */}
-        <div className="bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2">Theme</span>
-          <div className="flex items-center gap-0.5">
+        {/* Theme switcher (Light / Dark) */}
+        <div className="bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl flex items-center justify-between border border-slate-200/70 dark:border-slate-800">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 px-2">Theme</span>
+          <div className="flex items-center gap-1">
             <button
               id="theme-light-btn"
               onClick={() => setTheme('light')}
               title="Light Mode"
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                 theme === 'light'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  ? 'bg-white text-blue-600 shadow-xs border border-slate-200/80 font-bold'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               <Sun className="w-3.5 h-3.5" />
+              <span>Light</span>
             </button>
             <button
               id="theme-dark-btn"
               onClick={() => setTheme('dark')}
               title="Dark Mode"
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                 theme === 'dark'
-                  ? 'bg-slate-800 text-blue-400 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Moon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              id="theme-system-btn"
-              onClick={() => setTheme('system')}
-              title="System Default"
-              className={`p-1.5 rounded-lg transition-colors ${
-                theme === 'system'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-              }`}
-            >
-              <Laptop className="w-3.5 h-3.5" />
+              <span>Dark</span>
             </button>
           </div>
         </div>

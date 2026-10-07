@@ -23,10 +23,54 @@ interface ProfileViewProps {
 export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(profile.fullName);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleSaveName = () => {
-    db.updateProfile({ fullName: name });
+  // Keep local input state synced with reactive profile
+  React.useEffect(() => {
+    setName(profile.fullName);
+  }, [profile.fullName]);
+
+  const handleSaveName = async () => {
+    const cleanName = name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      setSaveError('Name must be at least 2 characters long.');
+      return;
+    }
+    setSaveError(null);
+
+    // Update in reactive DB service
+    const updated = db.updateProfile({ fullName: cleanName });
+
+    // Update session storage if active
+    if (typeof window !== 'undefined') {
+      try {
+        const rawSession = localStorage.getItem('nova_notes_auth_session');
+        if (rawSession) {
+          const session = JSON.parse(rawSession);
+          if (session.user) {
+            session.user.fullName = cleanName;
+          }
+          localStorage.setItem('nova_notes_auth_session', JSON.stringify(session));
+        }
+      } catch {}
+    }
+
     setIsEditing(false);
+
+    // Sync to backend persistent database
+    try {
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: profile.id,
+          email: profile.email,
+          fullName: cleanName,
+        }),
+      });
+    } catch (err) {
+      console.warn('Backend profile update sync warning:', err);
+    }
   };
 
   const handleToggleAdmin = () => {
@@ -157,12 +201,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onLogout }) =
             <div className="space-y-0.5 flex-1 mr-4">
               <span className="text-xs font-medium text-slate-400">Full Name</span>
               {isEditing ? (
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm"
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (saveError) setSaveError(null);
+                    }}
+                    className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm"
+                  />
+                  {saveError && (
+                    <p className="text-xs text-rose-500 mt-1">{saveError}</p>
+                  )}
+                </div>
               ) : (
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                   {profile.fullName}

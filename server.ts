@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { spawn, execFile } from 'child_process';
@@ -36,6 +37,414 @@ app.get('/api/health', (req, res) => {
     geminiConfigured: !!process.env.GEMINI_API_KEY,
   });
 });
+
+// ==================== PERSISTENT BACKEND DATABASE & AUTH ====================
+const DATA_DIR = path.join(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
+}
+
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
+const DSA_PROGRESS_FILE = path.join(DATA_DIR, 'dsa_progress.json');
+
+function hashPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+function loadJsonFile<T>(filePath: string, fallback: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error(`Error reading ${filePath}:`, err);
+  }
+  return fallback;
+}
+
+function saveJsonFile(filePath: string, data: any) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error(`Error writing ${filePath}:`, err);
+  }
+}
+
+// Initial seed users if database is fresh
+function initUserDatabase() {
+  const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+  const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+
+  const adminEmail = (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase();
+  if (!users[adminEmail]) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const adminId = 'usr_admin_101';
+    users[adminEmail] = {
+      id: adminId,
+      email: adminEmail,
+      fullName: 'Bathri Narayanan S',
+      role: 'admin',
+      salt,
+      passwordHash: hashPassword('Admin@123', salt),
+      college: 'Nova Institute of Technology',
+      themePreference: 'light',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    profiles[adminId] = {
+      id: adminId,
+      email: adminEmail,
+      fullName: 'Bathri Narayanan S',
+      role: 'admin',
+      selectedRole: 'Python Developer',
+      college: 'Nova Institute of Technology',
+      themePreference: 'light',
+      memberSince: '8/22/2026',
+      placementReadiness: 88,
+      sessionsCount: 65,
+      activeTimeMinutes: 45,
+      practiceMinutes: 30,
+      assessmentMinutes: 40,
+      interviewMinutes: 25,
+      practiceQuestionsCount: 42,
+      assessmentStatus: 'Qualified (85%)',
+      interviewStatus: 'unlocked',
+      strongSkills: ['Python', 'System Architecture', 'DSA'],
+      needsImprovement: ['SQL Optimization'],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const studentEmail = 'student.candidate@novanotes.edu';
+  if (!users[studentEmail]) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const studentId = 'usr_student_102';
+    users[studentEmail] = {
+      id: studentId,
+      email: studentEmail,
+      fullName: 'Placement Candidate',
+      role: 'student',
+      salt,
+      passwordHash: hashPassword('Student@123', salt),
+      college: 'Engineering Institute of Technology',
+      themePreference: 'light',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    profiles[studentId] = {
+      id: studentId,
+      email: studentEmail,
+      fullName: 'Placement Candidate',
+      role: 'student',
+      selectedRole: 'Python Developer',
+      college: 'Engineering Institute of Technology',
+      themePreference: 'light',
+      memberSince: '9/01/2026',
+      placementReadiness: 32,
+      sessionsCount: 12,
+      activeTimeMinutes: 15,
+      practiceMinutes: 20,
+      assessmentMinutes: 30,
+      interviewMinutes: 0,
+      practiceQuestionsCount: 25,
+      assessmentStatus: '2% In Progress',
+      interviewStatus: 'locked',
+      strongSkills: [],
+      needsImprovement: ['Python', 'OOP', 'DSA', 'SQL'],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  saveJsonFile(USERS_FILE, users);
+  saveJsonFile(PROFILES_FILE, profiles);
+}
+
+initUserDatabase();
+
+// Email validation helper: strictly rejects abc, abc@, abc@gmail, @gmail.com, test@, test@gmail.
+function isValidEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const trimmed = email.trim();
+  // Valid email regex requiring valid local part, @, valid domain, and at least 2 char TLD
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  if (!emailRegex.test(trimmed)) return false;
+  
+  // Explicitly guard against trailing dot or incomplete domain
+  if (trimmed.endsWith('.') || trimmed.includes('..')) return false;
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || !domain) return false;
+  if (!domain.includes('.')) return false;
+  const domainParts = domain.split('.');
+  if (domainParts[domainParts.length - 1].length < 2) return false;
+
+  return true;
+}
+
+// 1. SIGNUP ENDPOINT
+app.post('/api/auth/signup', (req, res) => {
+  try {
+    const { fullName, email, password, confirmPassword, college } = req.body;
+
+    // Validate Full Name
+    if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
+      return res.status(400).json({ error: 'Please enter your full name (minimum 2 characters).' });
+    }
+
+    // Validate Email
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        error: 'Please enter a valid email address (e.g., student@example.com or user@gmail.com). Incomplete formats like "abc@", "test@gmail.", or "@gmail.com" are not permitted.',
+      });
+    }
+
+    // Validate Password
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Password is required and must be at least 6 characters long.' });
+    }
+
+    // Confirm password match
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match. Please re-enter your password confirmation.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim();
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+
+    if (users[cleanEmail]) {
+      return res.status(409).json({ error: 'An account with this email address already exists. Please log in instead.' });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const role = cleanEmail === (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase() ? 'admin' : 'student';
+
+    const newUser = {
+      id: userId,
+      email: cleanEmail,
+      fullName: cleanName,
+      role,
+      college: college ? String(college).trim() : 'Engineering Institute of Technology',
+      salt,
+      passwordHash: hashPassword(password, salt),
+      themePreference: 'light',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const newProfile = {
+      id: userId,
+      email: cleanEmail,
+      fullName: cleanName,
+      role,
+      selectedRole: 'Python Developer',
+      college: newUser.college,
+      themePreference: 'light',
+      memberSince: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
+      placementReadiness: 25,
+      sessionsCount: 1,
+      activeTimeMinutes: 0,
+      practiceMinutes: 0,
+      assessmentMinutes: 0,
+      interviewMinutes: 0,
+      practiceQuestionsCount: 0,
+      dsaSolvedCount: 0,
+      assessmentStatus: 'Not Started',
+      interviewStatus: 'locked',
+      strongSkills: [],
+      needsImprovement: ['Python', 'DSA', 'OOP'],
+      updatedAt: new Date().toISOString(),
+    };
+
+    users[cleanEmail] = newUser;
+    profiles[userId] = newProfile;
+
+    saveJsonFile(USERS_FILE, users);
+    saveJsonFile(PROFILES_FILE, profiles);
+
+    res.status(201).json({
+      success: true,
+      message: 'Account created successfully!',
+      user: {
+        id: userId,
+        email: cleanEmail,
+        fullName: cleanName,
+        role,
+      },
+      profile: newProfile,
+    });
+  } catch (error: any) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'An unexpected server error occurred during signup.' });
+  }
+});
+
+// 2. LOGIN ENDPOINT
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password, portalTab = 'student' } = req.body;
+
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Password is required.' });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+
+    const user = users[cleanEmail];
+    if (!user) {
+      return res.status(404).json({
+        error: 'No account found with this email address. Please verify the email or create a new account via Signup.',
+      });
+    }
+
+    // Check Administrator portal authorization
+    const adminEmail = (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase();
+    if (portalTab === 'admin' && cleanEmail !== adminEmail) {
+      return res.status(403).json({
+        error: `Access Denied: Only authorized email (${adminEmail}) has Administrator privileges.`,
+      });
+    }
+
+    // Verify Password Hash
+    const computedHash = hashPassword(password, user.salt);
+    if (computedHash !== user.passwordHash) {
+      // Legacy fallback check for pre-seeded mock accounts if salt wasn't used
+      if (user.password && user.password !== password) {
+        return res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
+      } else if (!user.password && computedHash !== user.passwordHash) {
+        return res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
+      }
+    }
+
+    // Fetch user profile
+    const profile = profiles[user.id] || {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      selectedRole: 'Python Developer',
+      themePreference: user.themePreference || 'light',
+    };
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      profile,
+    });
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'An unexpected server error occurred during login.' });
+  }
+});
+
+// 3. PROFILE ENDPOINTS
+app.get('/api/profile/:id?', (req, res) => {
+  try {
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const id = req.params.id;
+    if (id && profiles[id]) {
+      return res.json({ success: true, profile: profiles[id] });
+    }
+    // Return first profile or default
+    const firstId = Object.keys(profiles)[0];
+    res.json({ success: true, profile: firstId ? profiles[firstId] : null });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to retrieve profile' });
+  }
+});
+
+app.put('/api/profile', (req, res) => {
+  try {
+    const updates = req.body;
+    if (!updates || !updates.id) {
+      return res.status(400).json({ error: 'User id is required to update profile' });
+    }
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+
+    const existing = profiles[updates.id] || {};
+    const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+    profiles[updates.id] = updated;
+    saveJsonFile(PROFILES_FILE, profiles);
+
+    // If full_name or email changed, update users table as well
+    if (updates.email && users[updates.email.toLowerCase()]) {
+      const u = users[updates.email.toLowerCase()];
+      if (updates.fullName) u.fullName = updates.fullName;
+      if (updates.themePreference) u.themePreference = updates.themePreference;
+      u.updatedAt = new Date().toISOString();
+      saveJsonFile(USERS_FILE, users);
+    }
+
+    res.json({ success: true, profile: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// 4. DSA PROGRESS ENDPOINTS
+app.get('/api/dsa/progress/:userId?', (req, res) => {
+  try {
+    const progressMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+    res.json({ success: true, progress: progressMap });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to load DSA progress' });
+  }
+});
+
+app.post('/api/dsa/progress', (req, res) => {
+  try {
+    const { problemId, status, attemptsCount, successfulSubmissions, lastAttemptedAt, submittedCode } = req.body;
+    if (!problemId) {
+      return res.status(400).json({ error: 'problemId is required' });
+    }
+    const progressMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+    const existing = progressMap[problemId] || {
+      problemId,
+      status: 'Not Started',
+      attemptsCount: 0,
+      successfulSubmissions: 0,
+    };
+
+    const updated = {
+      ...existing,
+      status: status || existing.status,
+      attemptsCount: attemptsCount !== undefined ? attemptsCount : existing.attemptsCount,
+      successfulSubmissions: successfulSubmissions !== undefined ? successfulSubmissions : existing.successfulSubmissions,
+      lastAttemptedAt: lastAttemptedAt || new Date().toISOString(),
+      submittedCode: submittedCode || existing.submittedCode,
+    };
+
+    progressMap[problemId] = updated;
+    saveJsonFile(DSA_PROGRESS_FILE, progressMap);
+
+    res.json({ success: true, progress: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to save DSA progress' });
+  }
+});
+
 
 // Smart fallback generator that creates follow-up questions directly derived from the candidate's answer
 function generateAdaptiveFollowUp(

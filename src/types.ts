@@ -153,6 +153,7 @@ export interface UserProfile {
   college?: string;
   role: UserRole;
   selectedRole: string;
+  themePreference?: 'light' | 'dark';
   memberSince: string;
   placementReadiness: number;
   sessionsCount: number;
@@ -161,6 +162,7 @@ export interface UserProfile {
   assessmentMinutes: number;
   interviewMinutes: number;
   practiceQuestionsCount: number;
+  dsaSolvedCount?: number;
   assessmentStatus: string;
   applicationState?: ApplicationState;
   interviewStatus: 'locked' | 'unlocked' | 'completed';

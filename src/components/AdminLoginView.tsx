@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { db } from '../services/db';
 import { UserProfile } from '../types';
+import { useTheme } from '../context/ThemeContext';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -11,7 +12,9 @@ import {
   Sparkles,
   Lock,
   X,
-  Plus
+  Plus,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { getSupabase, isSupabaseConfigured } from '../services/supabase';
 
@@ -27,6 +30,7 @@ interface GoogleAccount {
 }
 
 export const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLoginSuccess, onReturnToStudent }) => {
+  const { theme, setTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -124,7 +128,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLoginSuccess, 
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans antialiased">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans antialiased transition-colors duration-200">
       {/* Radial Glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-purple-600/15 via-indigo-600/10 to-transparent blur-3xl pointer-events-none" />
 
@@ -135,44 +139,72 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLoginSuccess, 
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <span className="font-extrabold text-lg tracking-tight text-white flex items-center gap-1.5">
+            <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
               NOVA NOTES
             </span>
-            <p className="text-xs text-purple-400 font-semibold">Administrative Access Gateway</p>
+            <p className="text-xs text-purple-600 dark:text-purple-400 font-semibold">Administrative Access Gateway</p>
           </div>
         </div>
 
-        <button
-          onClick={onReturnToStudent}
-          className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors flex items-center gap-1.5 border border-slate-700"
-        >
-          <GraduationCap className="w-4 h-4 text-blue-400" />
-          <span>Go to Student Portal</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Theme Toggle */}
+          <div className="p-1 rounded-xl bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 flex items-center gap-1">
+            <button
+              onClick={() => setTheme('light')}
+              title="Light Mode"
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                theme === 'light'
+                  ? 'bg-white text-purple-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              title="Dark Mode"
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                theme === 'dark'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <button
+            onClick={onReturnToStudent}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1.5 border border-slate-300 dark:border-slate-700"
+          >
+            <GraduationCap className="w-4 h-4 text-blue-500" />
+            <span>Go to Student Portal</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Container */}
       <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-6">
-        <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-slate-800/80 rounded-3xl p-7 sm:p-8 shadow-2xl shadow-black/60 space-y-5">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800/80 rounded-3xl p-7 sm:p-8 shadow-2xl shadow-slate-200/50 dark:shadow-black/60 space-y-5">
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mx-auto shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto shadow-xs">
               <Lock className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white mt-2">
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-2">
               Administrator Login
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Restricted portal. Server-side validation requires verified administrator credentials.
             </p>
           </div>
 
           {/* Security Notice */}
-          <div className="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-800/50 text-xs text-purple-200 flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+          <div className="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 text-xs text-purple-900 dark:text-purple-200 flex items-start gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-purple-200">Restricted Administration</p>
-              <p className="text-[11px] text-purple-300/80 mt-0.5 leading-relaxed">
+              <p className="font-semibold text-purple-900 dark:text-purple-200">Restricted Administration</p>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300/80 mt-0.5 leading-relaxed">
                 Only verified platform administrators can authenticate here. Normal students cannot register or bypass access controls.
               </p>
             </div>
@@ -225,8 +257,8 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLoginSuccess, 
 
           {/* Divider */}
           <div className="relative flex items-center justify-center">
-            <div className="border-t border-slate-800 w-full" />
-            <span className="bg-slate-900 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold absolute">
+            <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
+            <span className="bg-white dark:bg-slate-900 px-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold absolute">
               or administrator credentials
             </span>
           </div>
@@ -234,35 +266,35 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLoginSuccess, 
           {/* Email / Password Form */}
           <form onSubmit={handleEmailSubmit} className="space-y-3">
             <div>
-              <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                 Administrator Email
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@domain.com"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-purple-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:border-purple-500 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                 Administrator Key / Password
               </label>
               <div className="relative">
-                <Key className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-purple-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:border-purple-500 transition-colors"
                 />
               </div>
             </div>

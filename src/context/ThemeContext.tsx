@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: ThemeMode;
   setTheme: (mode: ThemeMode) => void;
+  toggleTheme: () => void;
   isDark: boolean;
 }
 
@@ -14,59 +15,53 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('nova_notes_theme') as ThemeMode;
-      if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+      if (saved === 'light' || saved === 'dark') return saved;
     }
-    return 'system';
+    return 'light'; // Sensible default
   });
 
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      if (theme === 'dark') return true;
-      if (theme === 'light') return false;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return false;
-  });
+  const [isDark, setIsDark] = useState<boolean>(theme === 'dark');
 
   useEffect(() => {
     const root = document.documentElement;
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const body = document.body;
+    const darkActive = theme === 'dark';
 
-    const applyTheme = () => {
-      let darkActive = false;
-      if (theme === 'dark') {
-        darkActive = true;
-      } else if (theme === 'light') {
-        darkActive = false;
-      } else {
-        darkActive = mediaQuery.matches;
-      }
-
-      setIsDark(darkActive);
-      if (darkActive) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    };
-
-    applyTheme();
-
-    const handler = () => {
-      if (theme === 'system') applyTheme();
-    };
-
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
+    setIsDark(darkActive);
+    if (darkActive) {
+      root.classList.add('dark');
+      body.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      body.classList.remove('dark');
+      root.setAttribute('data-theme', 'light');
+      root.style.colorScheme = 'light';
+    }
+    localStorage.setItem('nova_notes_theme', theme);
   }, [theme]);
 
   const setTheme = (mode: ThemeMode) => {
     setThemeState(mode);
     localStorage.setItem('nova_notes_theme', mode);
+    // Also save in user profile if available
+    try {
+      const stored = localStorage.getItem('nova_notes_profile');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.themePreference = mode;
+        localStorage.setItem('nova_notes_profile', JSON.stringify(parsed));
+      }
+    } catch {}
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, isDark }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, isDark }}>
       {children}
     </ThemeContext.Provider>
   );

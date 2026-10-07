@@ -6,12 +6,14 @@ import {
   TrendingUp, 
   Clock, 
   Calendar, 
-  ArrowRight,
-  CheckCircle2,
-  AlertTriangle
+  ArrowRight, 
+  CheckCircle2, 
+  AlertTriangle,
+  Layers
 } from 'lucide-react';
 import { AssessmentAttempt, UserProfile } from '../types';
 import { NavTab } from './Sidebar';
+import { db } from '../services/db';
 
 interface DashboardViewProps {
   profile: UserProfile;
@@ -24,8 +26,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   attempts,
   setActiveTab,
 }) => {
-  const firstName = profile.fullName.split(' ')[0] || 'Student';
   const isInterviewLocked = profile.interviewStatus === 'locked';
+  const dsaSummary = db.getDsaSummary();
 
   // Format progress bar color
   const getReadinessColor = (val: number) => {
@@ -39,15 +41,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Welcome Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-          Welcome back 👋 {firstName}
+          Welcome, {profile.fullName || 'Placement Candidate'}
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Your placement preparation overview.
+          Your institutional placement readiness and preparation overview.
         </p>
       </div>
 
-      {/* 4 Top Metric Cards (Page 1) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Current Role */}
         <div 
           id="metric-current-role"
@@ -61,13 +63,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <Code2 className="w-4 h-4" />
             </div>
-            <span className="text-base font-semibold text-slate-900 dark:text-white">
+            <span className="text-sm font-bold text-slate-900 dark:text-white truncate">
               {profile.selectedRole}
             </span>
           </div>
         </div>
 
-        {/* Card 2: Assessment */}
+        {/* Card 2: Assessment Status */}
         <div 
           id="metric-assessment"
           onClick={() => setActiveTab('assessment')}
@@ -83,7 +85,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Mock Interview */}
+        {/* Card 3: DSA Progress */}
+        <div 
+          id="metric-dsa-progress"
+          onClick={() => setActiveTab('practice')}
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs cursor-pointer hover:border-purple-500/50 transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              DSA Practice
+            </span>
+            <Layers className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 dark:text-white">
+              {dsaSummary.solved} / {dsaSummary.total}
+            </span>
+            <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
+              {Math.round((dsaSummary.solved / Math.max(1, dsaSummary.total)) * 100)}% Solved
+            </span>
+          </div>
+          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+            <div 
+              className="h-full rounded-full bg-purple-600 transition-all duration-500"
+              style={{ width: `${(dsaSummary.solved / Math.max(1, dsaSummary.total)) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Card 4: Mock Interview */}
         <div 
           id="metric-interview"
           onClick={() => setActiveTab('interview')}
@@ -102,12 +132,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {isInterviewLocked ? 'Locked' : 'Unlocked'}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-            {isInterviewLocked ? 'Pass the assessment to unlock' : 'Ready to begin your mock interview'}
-          </p>
         </div>
 
-        {/* Card 4: Placement Readiness */}
+        {/* Card 5: Placement Readiness */}
         <div 
           id="metric-readiness"
           onClick={() => setActiveTab('progress')}
