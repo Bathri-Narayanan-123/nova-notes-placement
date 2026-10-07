@@ -299,7 +299,19 @@ class DatabaseService {
   public getAllQuestions(): Question[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.QUESTIONS);
-      return data ? JSON.parse(data) : INITIAL_QUESTION_BANK;
+      if (!data) return INITIAL_QUESTION_BANK;
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        const existingIds = new Set(parsed.map((q: any) => q.id));
+        const missing = INITIAL_QUESTION_BANK.filter(q => !existingIds.has(q.id));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+      return INITIAL_QUESTION_BANK;
     } catch {
       return INITIAL_QUESTION_BANK;
     }
