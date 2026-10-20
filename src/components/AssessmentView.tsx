@@ -61,6 +61,23 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
   const [isEvaluatingTestCases, setIsEvaluatingTestCases] = useState(false);
   const [testCaseResults, setTestCaseResults] = useState<any | null>(null);
 
+  // Backend Cooldown state
+  const [cooldownData, setCooldownData] = useState<{
+    inCooldown: boolean;
+    remainingSeconds: number;
+    nextEligibleTime: string | null;
+    cooldownMinutes: number;
+    latestScore?: number;
+    lastAttemptTime?: string | null;
+  }>({
+    inCooldown: false,
+    remainingSeconds: 0,
+    nextEligibleTime: null,
+    cooldownMinutes: 120,
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+
   // Timer & Security state
   const [secondsRemaining, setSecondsRemaining] = useState(30 * 60);
   const [suspiciousActivityCount, setSuspiciousActivityCount] = useState(0);
@@ -78,8 +95,62 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
     ? Math.max(...attempts.map((a) => a.attemptNumber)) + 1 
     : 1;
 
+  const fetchCooldown = async () => {
+    try {
+      const res = await fetch(`/api/assessment/cooldown/${profile.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCooldownData(data);
+      }
+    } catch (err) {
+      console.warn('Cooldown check warning:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCooldown();
+  }, [profile.id, examState]);
+
+  // Active cooldown ticker
+  useEffect(() => {
+    if (!cooldownData.inCooldown || cooldownData.remainingSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownData((prev) => {
+        if (prev.remainingSeconds <= 1) {
+          clearInterval(interval);
+          return { ...prev, inCooldown: false, remainingSeconds: 0, nextEligibleTime: null };
+        }
+        return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownData.inCooldown, cooldownData.remainingSeconds]);
+
+  const formatCooldownTime = (totalSec: number) => {
+    const hours = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m ${secs}s`;
+    }
+    return `${mins}m ${secs}s`;
+  };
+
   // Initialize questions
-  const startExam = () => {
+  const startExam = async () => {
+    // Re-verify cooldown from server before exam initiation
+    try {
+      const res = await fetch(`/api/assessment/cooldown/${profile.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.inCooldown) {
+          setCooldownData(data);
+          alert(`Assessment is locked by the waiting cooldown. Next eligible attempt in: ${formatCooldownTime(data.remainingSeconds)}`);
+          return;
+        }
+      }
+    } catch {}
+
     const isAdaptive = initialAdaptive || nextAttemptNum > 1;
     const weakTopics = profile.needsImprovement || [];
     const generated = db.generateAssessmentQuestions(profile.selectedRole, isAdaptive, weakTopics);
@@ -154,11 +225,83 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
     setUserAnswers((prev) => ({ ...prev, [qId]: answer }));
   };
 
-  const submitAssessment = (autoSubmit = false) => {
+  const submitAssessment = async (autoSubmit = false) => {
     clearInterval(timerRef.current);
     setShowSubmitModal(false);
+    setIsSubmitting(true);
+    setSubmissionError(null);
 
-    // Calculate score
+    const elapsedMinutes = Math.max(1, Math.round((config.assessmentTimeMinutes * 60 - secondsRemaining) / 60));
+
+    try {
+      // 1. Authoritative backend scoring & persistent attempt recording
+      const response = await fetch('/api/assessment/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: profile.id,
+          role: profile.selectedRole,
+          questions,
+          answers: userAnswers,
+          codingDrafts,
+          codingEvaluations,
+          elapsedMinutes,
+          isAdaptive: initialAdaptive || nextAttemptNum > 1,
+        }),
+      });
+
+      if (response.status === 429) {
+        const errorData = await response.json();
+        setCooldownData({
+          inCooldown: true,
+          remainingSeconds: errorData.remainingSeconds || 7200,
+          nextEligibleTime: errorData.nextEligibleTime || null,
+          cooldownMinutes: config.cooldownMinutes || 120,
+        });
+        setSubmissionError(errorData.error || 'Assessment attempt is on cooldown.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        const authoritativeAttempt: AssessmentAttempt = data.attempt;
+
+        // Synchronize local database storage
+        const currentAttempts = db.getAttempts();
+        const updatedAttempts = [authoritativeAttempt, ...currentAttempts.filter(a => a.id !== authoritativeAttempt.id)];
+        localStorage.setItem('nova_notes_attempts', JSON.stringify(updatedAttempts));
+
+        if (authoritativeAttempt.questions && authoritativeAttempt.questions.length > 0) {
+          db.markQuestionsAttempted(authoritativeAttempt.questions.map((q) => q.id));
+        }
+
+        if (data.profile) {
+          db.updateProfile(data.profile);
+        }
+
+        setCompletedAttempt(authoritativeAttempt);
+        setExamState('submitted');
+        fetchCooldown();
+
+        if (onAssessmentCompleted) {
+          onAssessmentCompleted(authoritativeAttempt);
+        }
+
+        if (authoritativeAttempt.isQualified) {
+          confetti({
+            particleCount: 120,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        }
+        return;
+      }
+    } catch (err: any) {
+      console.warn('Backend submission network error, computing authoritative fallback:', err);
+    }
+
+    // 2. Fallback calculation if network disconnected so student answers are never discarded
     let mcqScore = 0;
     let aptitudeScore = 0;
     let pseudoScore = 0;
@@ -178,25 +321,24 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
       let isCorrect = false;
 
       if (q.type === 'MCQ' || q.type === 'MSQ' || (q as any).type === 'DSA') {
-        if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase()) {
+        if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase() && userAns.trim() !== '') {
           mcqScore += 1;
           isCorrect = true;
         }
       } else if (q.type === 'APTITUDE') {
-        if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase()) {
-          aptitudeScore += 1; // 10 Aptitudes = 10 points
+        if (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase() && userAns.trim() !== '') {
+          aptitudeScore += 1;
           isCorrect = true;
         }
       } else if (q.type === 'PSEUDOCODE') {
         if (
-          userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase() ||
-          userAns.trim().toLowerCase() === (q.expectedOutput || '').trim().toLowerCase()
+          (userAns.trim().toUpperCase() === (q.correctAnswer || '').trim().toUpperCase() && userAns.trim() !== '') ||
+          (q.expectedOutput && userAns.trim().toLowerCase() === q.expectedOutput.trim().toLowerCase())
         ) {
-          pseudoScore += 1; // 10 Pseudocode * 1 = 10 points
+          pseudoScore += 1;
           isCorrect = true;
         }
       } else if (q.type === 'CODING') {
-        // Genuinely evaluate code submission
         const evalResult = codingEvaluations[q.id];
         if (evalResult?.allPassed || (evalResult?.passedCount > 0 && evalResult?.passedCount === evalResult?.totalCount)) {
           codingScore += 1;
@@ -204,8 +346,7 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
         } else if (evalResult && evalResult.passedCount > 0 && evalResult.passedCount >= Math.ceil(evalResult.totalCount * 0.75)) {
           codingScore += 1;
           isCorrect = true;
-        } else if (userAns && userAns.trim().length > 30 && !userAns.includes('pass') && (userAns.includes('return') || userAns.includes('SELECT') || userAns.includes('print') || userAns.includes('System.out') || userAns.includes('cout'))) {
-          // Submitted valid solution code without running test cases manually
+        } else if (userAns && userAns.trim().length > 30 && !userAns.includes('pass') && (userAns.includes('return') || userAns.includes('SELECT') || userAns.includes('print'))) {
           codingScore += 1;
           isCorrect = true;
         }
@@ -217,12 +358,10 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
       }
     });
 
-    // Total 39 questions (15 MCQ + 10 Aptitude + 10 Pseudocode + 4 Coding)
     const totalQCount = questions.length || 39;
     const finalScore = Math.round((correctCount / totalQCount) * 100);
     const isQualified = finalScore >= config.qualificationThreshold;
 
-    // Identify weak & strong topics based on qualification threshold (70%)
     const weakTopics: string[] = [];
     const strongTopics: string[] = [];
 
@@ -234,8 +373,6 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
         strongTopics.push(topic);
       }
     });
-
-    const elapsedMinutes = Math.max(1, Math.round((config.assessmentTimeMinutes * 60 - secondsRemaining) / 60));
 
     const newAttempt = db.recordAttempt({
       studentId: profile.id,
@@ -260,13 +397,13 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
 
     setCompletedAttempt(newAttempt);
     setExamState('submitted');
+    setIsSubmitting(false);
 
     if (onAssessmentCompleted) {
       onAssessmentCompleted(newAttempt);
     }
 
     if (isQualified) {
-      // Trigger celebration
       confetti({
         particleCount: 120,
         spread: 70,
@@ -365,15 +502,66 @@ export const AssessmentView: React.FC<AssessmentViewProps> = ({
             </ul>
           </div>
 
+          {/* Submission error banner if any */}
+          {submissionError && (
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>{submissionError}</span>
+            </div>
+          )}
+
+          {/* Active Cooldown Banner (Enforced by backend) */}
+          {cooldownData.inCooldown && (
+            <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 space-y-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-amber-600 dark:text-amber-400">
+                <Clock className="w-5 h-5" />
+                <span>Assessment Reattempt Waiting Period Active</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                To preserve testing integrity and allow adequate study time between attempts, a 2-hour waiting period is enforced between assessment attempts.
+              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-amber-500/20 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px] font-medium">Time Remaining Until Eligible</span>
+                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-base">
+                    {formatCooldownTime(cooldownData.remainingSeconds)}
+                  </span>
+                </div>
+                {cooldownData.nextEligibleTime && (
+                  <div>
+                    <span className="text-slate-400 block text-[11px] font-medium">Next Attempt Unlocked At</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {new Date(cooldownData.nextEligibleTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({new Date(cooldownData.nextEligibleTime).toLocaleDateString()})
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Action Button */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
               id="begin-assessment-btn"
               onClick={startExam}
-              className="w-full py-3.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
+              disabled={cooldownData.inCooldown}
+              className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                cooldownData.inCooldown
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 cursor-pointer'
+              }`}
             >
-              Begin {profile.selectedRole} Assessment
-              <ArrowRight className="w-4 h-4" />
+              {cooldownData.inCooldown ? (
+                <>
+                  <Clock className="w-4 h-4 text-amber-500 animate-spin" />
+                  <span>Assessment Cooldown Active ({formatCooldownTime(cooldownData.remainingSeconds)})</span>
+                </>
+              ) : (
+                <>
+                  <span>Begin {profile.selectedRole} Assessment</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -184,6 +184,7 @@ const DEFAULT_CONFIG: SystemConfig = {
   assessmentTimeMinutes: 30,
   fullscreenRequired: true,
   suspiciousActivityDetection: true,
+  cooldownMinutes: 120,
 };
 
 type Listener = () => void;
@@ -317,6 +318,17 @@ class DatabaseService {
     const updated = { ...current, ...updates };
     localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(updated));
     this.notify();
+
+    if (typeof window !== 'undefined') {
+      try {
+        fetch('/api/system/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        }).catch(() => {});
+      } catch {}
+    }
+
     return updated;
   }
 
@@ -890,6 +902,26 @@ PRINT compute(3)`,
     });
 
     this.notify();
+
+    // Persist to backend interview storage
+    if (typeof window !== 'undefined') {
+      try {
+        fetch('/api/ai/interview/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: newInterview.studentId || profile.id,
+            role: newInterview.role,
+            messages: newInterview.transcript,
+            transcript: newInterview.transcript,
+            evaluation: newInterview.evaluation,
+            score: newInterview.score,
+            isDirectTest: newInterview.isDirectTest,
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
+
     return newInterview;
   }
 

@@ -510,6 +510,63 @@ export const InterviewView: React.FC<InterviewViewProps> = ({ profile, setActive
             </button>
           </div>
         </div>
+
+        {/* Previous Completed Mock Interviews */}
+        {db.getInterviews().length > 0 && (
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 text-left">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-500" />
+                <span>Past Interview Sessions &amp; Evaluation History</span>
+              </h3>
+              <span className="text-xs text-slate-500 font-semibold">
+                {db.getInterviews().length} session{db.getInterviews().length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {db.getInterviews().map((int) => (
+                <div key={int.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        int.score >= 70 
+                          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                      }`}>
+                        Score: {int.score}%
+                      </span>
+                      <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                        {int.role} Placement Interview
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      {new Date(int.date).toLocaleDateString()} at {new Date(int.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} &bull; {int.transcript?.length || 0} questions &amp; responses
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (int.evaluation) {
+                        setEvaluation(int.evaluation);
+                        if (int.transcript && int.transcript.length > 0) {
+                          setMessages(int.transcript.map((t) => ({
+                            role: t.speaker === 'candidate' ? 'candidate' : 'interviewer',
+                            text: t.message,
+                            timestamp: t.timestamp || '',
+                          })));
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors self-start sm:self-auto"
+                  >
+                    Review Evaluation &amp; Feedback
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

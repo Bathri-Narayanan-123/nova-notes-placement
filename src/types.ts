@@ -175,4 +175,5 @@ export interface SystemConfig {
   assessmentTimeMinutes: number; // default 30
   fullscreenRequired: boolean;
   suspiciousActivityDetection: boolean;
+  cooldownMinutes?: number; // default 120 (2 hours)
 }

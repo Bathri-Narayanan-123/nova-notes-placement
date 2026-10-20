@@ -47,6 +47,31 @@ if (!fs.existsSync(DATA_DIR)) {
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
 const DSA_PROGRESS_FILE = path.join(DATA_DIR, 'dsa_progress.json');
+const ATTEMPTS_FILE = path.join(DATA_DIR, 'attempts.json');
+const INTERVIEWS_FILE = path.join(DATA_DIR, 'interviews.json');
+const SYSTEM_CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+
+const DEFAULT_CONFIG = {
+  assessmentTimeMinutes: 30,
+  qualificationThreshold: 70,
+  cooldownMinutes: 120, // 2-hour waiting period between completed assessment attempts
+};
+
+function getSystemConfig() {
+  return loadJsonFile(SYSTEM_CONFIG_FILE, DEFAULT_CONFIG);
+}
+
+function calculateBackendReadinessScore(
+  latestScore: number,
+  practiceCount: number,
+  interviewScore: number
+): number {
+  const assessmentWeight = Math.min(100, Math.max(0, latestScore)) * 0.5;
+  const practiceWeight = Math.min(100, (Math.max(0, practiceCount) / 50) * 100) * 0.25;
+  const interviewWeight =
+    (interviewScore > 0 ? interviewScore : latestScore >= 70 ? 70 : 20) * 0.25;
+  return Math.round(assessmentWeight + practiceWeight + interviewWeight);
+}
 
 function hashPassword(password: string, salt: string): string {
   return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
@@ -157,8 +182,48 @@ function initUserDatabase() {
     };
   }
 
+  const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+  const adminId = 'usr_admin_101';
+  if (!attemptsMap[adminId]) {
+    attemptsMap[adminId] = [
+      {
+        id: 'att-admin-6',
+        attemptNumber: 6,
+        studentId: adminId,
+        role: 'Python Developer',
+        date: '9/7/2026',
+        timestamp: new Date(Date.now() - 3600 * 1000 * 24 * 5).toISOString(),
+        score: 85,
+        percentage: 85,
+        isQualified: true,
+        mcqScore: 14,
+        aptitudeScore: 9,
+        pseudoScore: 8,
+        codingScore: 4,
+        totalQuestions: 39,
+        correctCount: 35,
+        durationMinutes: 24,
+        questions: [],
+        answers: {},
+        topicBreakdown: {
+          Python: { total: 15, correct: 14, percentage: 93 },
+          DSA: { total: 10, correct: 9, percentage: 90 },
+          SQL: { total: 10, correct: 8, percentage: 80 },
+          SystemArchitecture: { total: 4, correct: 4, percentage: 100 },
+        },
+        weakTopics: ['SQL Optimization'],
+        strongTopics: ['Python', 'DSA', 'System Architecture'],
+        isAdaptive: true,
+        status: 'Qualified',
+      },
+    ];
+  }
+
   saveJsonFile(USERS_FILE, users);
   saveJsonFile(PROFILES_FILE, profiles);
+  saveJsonFile(ATTEMPTS_FILE, attemptsMap);
+  const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+  saveJsonFile(INTERVIEWS_FILE, interviewsMap);
 }
 
 initUserDatabase();
@@ -263,6 +328,19 @@ app.post('/api/auth/signup', (req, res) => {
 
     users[cleanEmail] = newUser;
     profiles[userId] = newProfile;
+
+    // Initialize user-isolated storage entries
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    attemptsMap[userId] = [];
+    saveJsonFile(ATTEMPTS_FILE, attemptsMap);
+
+    const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+    interviewsMap[userId] = [];
+    saveJsonFile(INTERVIEWS_FILE, interviewsMap);
+
+    const dsaMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+    dsaMap[userId] = {};
+    saveJsonFile(DSA_PROGRESS_FILE, dsaMap);
 
     saveJsonFile(USERS_FILE, users);
     saveJsonFile(PROFILES_FILE, profiles);
@@ -403,11 +481,379 @@ app.put('/api/profile', (req, res) => {
   }
 });
 
-// 4. DSA PROGRESS ENDPOINTS
+// Output normalization helper for test cases, pseudocode, and coding outputs
+function normalizeOutputForComparison(actual: string, expected: string): boolean {
+  if (typeof actual !== 'string' || typeof expected !== 'string') {
+    return String(actual ?? '').trim() === String(expected ?? '').trim();
+  }
+  const normActual = actual.trim().replace(/\r\n/g, '\n');
+  const normExpected = expected.trim().replace(/\r\n/g, '\n');
+  if (normActual === normExpected) return true;
+  if (normActual.toLowerCase() === normExpected.toLowerCase()) return true;
+
+  try {
+    const jsonA = JSON.parse(normActual.replace(/'/g, '"'));
+    const jsonB = JSON.parse(normExpected.replace(/'/g, '"'));
+    if (JSON.stringify(jsonA) === JSON.stringify(jsonB)) return true;
+  } catch {}
+
+  const numA = Number(normActual);
+  const numB = Number(normExpected);
+  if (!isNaN(numA) && !isNaN(numB) && Math.abs(numA - numB) < 1e-6) return true;
+
+  if (normActual.replace(/\s+/g, '') === normExpected.replace(/\s+/g, '')) return true;
+
+  return false;
+}
+
+// ==================== SYSTEM CONFIG ENDPOINTS ====================
+app.get('/api/system/config', (req, res) => {
+  res.json({ success: true, config: getSystemConfig() });
+});
+
+app.put('/api/system/config', (req, res) => {
+  try {
+    const current = getSystemConfig();
+    const updated = { ...current, ...req.body };
+    saveJsonFile(SYSTEM_CONFIG_FILE, updated);
+    res.json({ success: true, config: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update system config' });
+  }
+});
+
+// ==================== ASSESSMENT & COOLDOWN ENDPOINTS ====================
+
+// Check Cooldown Status for a specific user
+app.get('/api/assessment/cooldown/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId parameter is required' });
+    }
+
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    const userAttempts = attemptsMap[userId] || [];
+    const config = getSystemConfig();
+    const cooldownMinutes = Number(config.cooldownMinutes) || 120;
+    const cooldownMs = cooldownMinutes * 60 * 1000;
+
+    if (!userAttempts || userAttempts.length === 0) {
+      return res.json({
+        inCooldown: false,
+        remainingSeconds: 0,
+        nextEligibleTime: null,
+        cooldownMinutes,
+        lastAttemptTime: null,
+        totalAttempts: 0,
+      });
+    }
+
+    // Sort descending by timestamp
+    const sorted = [...userAttempts].sort((a, b) => {
+      const tA = new Date(a.timestamp || a.date).getTime();
+      const tB = new Date(b.timestamp || b.date).getTime();
+      return tB - tA;
+    });
+
+    const latest = sorted[0];
+    const latestTime = new Date(latest.timestamp || latest.date).getTime();
+    const now = Date.now();
+    const elapsed = now - latestTime;
+
+    if (elapsed < cooldownMs) {
+      const remainingSeconds = Math.max(0, Math.ceil((cooldownMs - elapsed) / 1000));
+      const nextEligibleTime = new Date(latestTime + cooldownMs).toISOString();
+      return res.json({
+        inCooldown: true,
+        remainingSeconds,
+        nextEligibleTime,
+        cooldownMinutes,
+        lastAttemptTime: new Date(latestTime).toISOString(),
+        latestAttemptNumber: latest.attemptNumber,
+        latestScore: latest.score,
+        totalAttempts: userAttempts.length,
+      });
+    }
+
+    return res.json({
+      inCooldown: false,
+      remainingSeconds: 0,
+      nextEligibleTime: null,
+      cooldownMinutes,
+      lastAttemptTime: new Date(latestTime).toISOString(),
+      latestAttemptNumber: latest.attemptNumber,
+      latestScore: latest.score,
+      totalAttempts: userAttempts.length,
+    });
+  } catch (error: any) {
+    console.error('Cooldown check error:', error);
+    res.status(500).json({ error: 'Failed to verify assessment cooldown status' });
+  }
+});
+
+// Submit Assessment: Authoritative backend scoring & cooldown enforcement
+app.post('/api/assessment/submit', async (req, res) => {
+  try {
+    const {
+      studentId,
+      role = 'Python Developer',
+      questions = [],
+      answers = {},
+      codingDrafts = {},
+      codingEvaluations = {},
+      elapsedMinutes = 25,
+      isAdaptive = false,
+    } = req.body;
+
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId is required for assessment submission' });
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: 'Questions payload is required' });
+    }
+
+    const config = getSystemConfig();
+    const cooldownMinutes = Number(config.cooldownMinutes) || 120;
+    const cooldownMs = cooldownMinutes * 60 * 1000;
+    const threshold = Number(config.qualificationThreshold) || 70;
+
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    const userAttempts = attemptsMap[studentId] || [];
+
+    // Backend Cooldown Validation
+    if (userAttempts.length > 0) {
+      const sorted = [...userAttempts].sort((a, b) => {
+        const tA = new Date(a.timestamp || a.date).getTime();
+        const tB = new Date(b.timestamp || b.date).getTime();
+        return tB - tA;
+      });
+      const latest = sorted[0];
+      const latestTime = new Date(latest.timestamp || latest.date).getTime();
+      const elapsed = Date.now() - latestTime;
+
+      if (elapsed < cooldownMs) {
+        const remainingSeconds = Math.ceil((cooldownMs - elapsed) / 1000);
+        const nextEligibleTime = new Date(latestTime + cooldownMs).toISOString();
+        return res.status(429).json({
+          error: `Assessment attempt is locked by the waiting cooldown. Please wait before reattempting.`,
+          inCooldown: true,
+          remainingSeconds,
+          nextEligibleTime,
+        });
+      }
+    }
+
+    // Authoritative scoring calculation
+    let mcqScore = 0;
+    let aptitudeScore = 0;
+    let pseudoScore = 0;
+    let codingScore = 0;
+    let correctCount = 0;
+
+    const topicBreakdown: Record<string, { total: number; correct: number; percentage: number }> = {};
+
+    for (const q of questions) {
+      const topic = q.topic || 'Core Placement';
+      if (!topicBreakdown[topic]) {
+        topicBreakdown[topic] = { total: 0, correct: 0, percentage: 0 };
+      }
+      topicBreakdown[topic].total += 1;
+
+      const userAns = answers[q.id] || codingDrafts[q.id] || '';
+      let isCorrect = false;
+
+      const qType = String(q.type || 'MCQ').toUpperCase();
+
+      if (qType === 'MCQ' || qType === 'MSQ' || qType === 'DSA') {
+        const expected = String(q.correctAnswer || '').trim().toUpperCase();
+        const actual = String(userAns || '').trim().toUpperCase();
+        if (expected && actual && expected === actual) {
+          mcqScore += 1;
+          isCorrect = true;
+        }
+      } else if (qType === 'APTITUDE') {
+        const expected = String(q.correctAnswer || '').trim().toUpperCase();
+        const actual = String(userAns || '').trim().toUpperCase();
+        if (expected && actual && expected === actual) {
+          aptitudeScore += 1;
+          isCorrect = true;
+        }
+      } else if (qType === 'PSEUDOCODE') {
+        const expectedAns = String(q.correctAnswer || '').trim().toUpperCase();
+        const expectedOut = String(q.expectedOutput || '').trim();
+        const actual = String(userAns || '').trim();
+
+        if (
+          (expectedAns && actual.toUpperCase() === expectedAns) ||
+          (expectedOut && normalizeOutputForComparison(actual, expectedOut)) ||
+          normalizeOutputForComparison(actual, String(q.correctAnswer || ''))
+        ) {
+          pseudoScore += 1;
+          isCorrect = true;
+        }
+      } else if (qType === 'CODING') {
+        // Evaluate coding answer
+        const evalResult = codingEvaluations[q.id];
+        if (evalResult?.allPassed || (evalResult?.passedCount > 0 && evalResult?.passedCount === evalResult?.totalCount)) {
+          codingScore += 1;
+          isCorrect = true;
+        } else if (evalResult && evalResult.passedCount > 0 && evalResult.passedCount >= Math.ceil(evalResult.totalCount * 0.75)) {
+          codingScore += 1;
+          isCorrect = true;
+        } else if (userAns && userAns.trim().length > 25 && !userAns.includes('pass') && (userAns.includes('return') || userAns.includes('SELECT') || userAns.includes('print') || userAns.includes('System.out') || userAns.includes('cout') || userAns.includes('printf'))) {
+          codingScore += 1;
+          isCorrect = true;
+        }
+      }
+
+      if (isCorrect) {
+        correctCount += 1;
+        topicBreakdown[topic].correct += 1;
+      }
+    }
+
+    const totalQuestions = questions.length || 39;
+    const finalScore = Math.round((correctCount / totalQuestions) * 100);
+    const isQualified = finalScore >= threshold;
+
+    const weakTopics: string[] = [];
+    const strongTopics: string[] = [];
+
+    Object.entries(topicBreakdown).forEach(([topic, data]) => {
+      data.percentage = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
+      if (data.percentage < threshold) {
+        weakTopics.push(topic);
+      } else {
+        strongTopics.push(topic);
+      }
+    });
+
+    const nextAttemptNumber = userAttempts.length > 0 
+      ? Math.max(...userAttempts.map((a: any) => a.attemptNumber || 0)) + 1 
+      : 1;
+
+    const newAttempt = {
+      id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      attemptNumber: nextAttemptNumber,
+      studentId,
+      role,
+      date: new Date().toLocaleDateString('en-US'),
+      timestamp: new Date().toISOString(),
+      score: finalScore,
+      percentage: finalScore,
+      isQualified,
+      mcqScore,
+      aptitudeScore,
+      pseudoScore,
+      codingScore,
+      totalQuestions,
+      correctCount,
+      durationMinutes: Math.max(1, Number(elapsedMinutes) || 25),
+      questions,
+      answers: { ...answers, ...codingDrafts },
+      topicBreakdown,
+      weakTopics,
+      strongTopics,
+      isAdaptive: !!isAdaptive,
+      status: isQualified ? 'Qualified' : 'Not Qualified',
+    };
+
+    userAttempts.unshift(newAttempt);
+    attemptsMap[studentId] = userAttempts;
+    saveJsonFile(ATTEMPTS_FILE, attemptsMap);
+
+    // Synchronize User Profile
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const profile = profiles[studentId] || {
+      id: studentId,
+      fullName: 'Placement Candidate',
+      role: 'student',
+      selectedRole: role,
+    };
+
+    const newReadiness = calculateBackendReadinessScore(
+      finalScore,
+      profile.practiceQuestionsCount || 0,
+      isQualified ? 75 : 20
+    );
+
+    profile.assessmentStatus = `${finalScore}% ${isQualified ? 'Qualified' : 'Not Qualified'}`;
+    profile.interviewStatus = isQualified ? 'unlocked' : (profile.interviewStatus === 'unlocked' ? 'unlocked' : 'locked');
+    profile.placementReadiness = newReadiness;
+    profile.needsImprovement = weakTopics.length > 0 ? weakTopics : (profile.needsImprovement || []);
+    profile.strongSkills = strongTopics.length > 0 ? strongTopics : (profile.strongSkills || []);
+    profile.assessmentMinutes = (profile.assessmentMinutes || 0) + (newAttempt.durationMinutes || 25);
+    profile.updatedAt = new Date().toISOString();
+
+    profiles[studentId] = profile;
+    saveJsonFile(PROFILES_FILE, profiles);
+
+    res.json({
+      success: true,
+      attempt: newAttempt,
+      profile,
+    });
+  } catch (error: any) {
+    console.error('Assessment submission error:', error);
+    res.status(500).json({ error: 'Failed to record assessment submission', details: error?.message });
+  }
+});
+
+// Get User-Isolated Attempts
+app.get('/api/assessment/attempts/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    const userAttempts = attemptsMap[userId] || [];
+    res.json({
+      success: true,
+      attempts: userAttempts,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch assessment attempts' });
+  }
+});
+
+// Get Specific Attempt by ID
+app.get('/api/assessment/attempt/:id', (req, res) => {
+  try {
+    const id = req.params.id;
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    
+    for (const userId of Object.keys(attemptsMap)) {
+      const match = attemptsMap[userId]?.find((a: any) => a.id === id);
+      if (match) {
+        return res.json({ success: true, attempt: match });
+      }
+    }
+
+    res.status(404).json({ error: 'Assessment attempt not found' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to find assessment attempt' });
+  }
+});
+
+// ==================== USER-ISOLATED DSA PROGRESS ENDPOINTS ====================
 app.get('/api/dsa/progress/:userId?', (req, res) => {
   try {
-    const progressMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
-    res.json({ success: true, progress: progressMap });
+    const userId = req.params.userId || 'default';
+    const dsaStore = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+    
+    // Check if store is keyed by userId
+    let userMap: Record<string, any> = {};
+    if (dsaStore[userId] && typeof dsaStore[userId] === 'object') {
+      userMap = dsaStore[userId];
+    } else if (!req.params.userId) {
+      userMap = dsaStore;
+    }
+
+    res.json({ success: true, progress: userMap });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to load DSA progress' });
   }
@@ -415,12 +861,27 @@ app.get('/api/dsa/progress/:userId?', (req, res) => {
 
 app.post('/api/dsa/progress', (req, res) => {
   try {
-    const { problemId, status, attemptsCount, successfulSubmissions, lastAttemptedAt, submittedCode } = req.body;
+    const {
+      userId = 'default',
+      problemId,
+      status,
+      attemptsCount,
+      successfulSubmissions,
+      lastAttemptedAt,
+      submittedCode,
+      language
+    } = req.body;
+
     if (!problemId) {
       return res.status(400).json({ error: 'problemId is required' });
     }
-    const progressMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
-    const existing = progressMap[problemId] || {
+
+    const dsaStore = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+    if (!dsaStore[userId]) {
+      dsaStore[userId] = {};
+    }
+
+    const existing = dsaStore[userId][problemId] || {
       problemId,
       status: 'Not Started',
       attemptsCount: 0,
@@ -434,14 +895,95 @@ app.post('/api/dsa/progress', (req, res) => {
       successfulSubmissions: successfulSubmissions !== undefined ? successfulSubmissions : existing.successfulSubmissions,
       lastAttemptedAt: lastAttemptedAt || new Date().toISOString(),
       submittedCode: submittedCode || existing.submittedCode,
+      language: language || existing.language || 'python',
     };
 
-    progressMap[problemId] = updated;
-    saveJsonFile(DSA_PROGRESS_FILE, progressMap);
+    dsaStore[userId][problemId] = updated;
+    saveJsonFile(DSA_PROGRESS_FILE, dsaStore);
+
+    // Update user profile solved count
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    if (profiles[userId]) {
+      const solvedCount = Object.values(dsaStore[userId]).filter((p: any) => p.status === 'Solved').length;
+      profiles[userId].dsaSolvedCount = solvedCount;
+      profiles[userId].updatedAt = new Date().toISOString();
+      saveJsonFile(PROFILES_FILE, profiles);
+    }
 
     res.json({ success: true, progress: updated });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to save DSA progress' });
+  }
+});
+
+// ==================== INTERVIEW PERSISTENCE & HISTORY ENDPOINTS ====================
+app.post('/api/ai/interview/save', (req, res) => {
+  try {
+    const { studentId, role, messages = [], transcript = [], evaluation, score = 80, isDirectTest = false } = req.body;
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId is required' });
+    }
+
+    const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+    if (!interviewsMap[studentId]) {
+      interviewsMap[studentId] = [];
+    }
+
+    const newInterview = {
+      id: `int_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      studentId,
+      role: role || 'Software Engineer',
+      date: new Date().toISOString(),
+      score: score || evaluation?.overallScore || 80,
+      status: 'completed',
+      transcript: transcript.length > 0 ? transcript : messages.map((m: any) => ({
+        speaker: m.role || m.speaker,
+        message: m.text || m.message,
+        timestamp: m.timestamp || new Date().toLocaleTimeString(),
+      })),
+      evaluation,
+      isDirectTest: !!isDirectTest,
+    };
+
+    interviewsMap[studentId].unshift(newInterview);
+    saveJsonFile(INTERVIEWS_FILE, interviewsMap);
+
+    // Update Profile
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    if (profiles[studentId]) {
+      profiles[studentId].interviewStatus = 'completed';
+      profiles[studentId].interviewMinutes = (profiles[studentId].interviewMinutes || 0) + 15;
+      const latestScore = 80;
+      profiles[studentId].placementReadiness = calculateBackendReadinessScore(
+        latestScore,
+        profiles[studentId].practiceQuestionsCount || 0,
+        newInterview.score
+      );
+      profiles[studentId].updatedAt = new Date().toISOString();
+      saveJsonFile(PROFILES_FILE, profiles);
+    }
+
+    res.json({ success: true, interview: newInterview });
+  } catch (error: any) {
+    console.error('Interview save error:', error);
+    res.status(500).json({ error: 'Failed to save interview session' });
+  }
+});
+
+app.get('/api/ai/interview/history/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId parameter is required' });
+    }
+
+    const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+    res.json({
+      success: true,
+      interviews: interviewsMap[userId] || [],
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to load interview history' });
   }
 });
 
@@ -453,14 +995,22 @@ function generateAdaptiveFollowUp(
   round: string,
   turnIndex: number
 ): string {
-  if (!candidateAnswer || candidateAnswer.trim().length < 10) {
+  const lower = (candidateAnswer || '').toLowerCase().trim();
+  const isEvasive = 
+    lower === 'skip' || 
+    lower === 'pass' || 
+    lower.includes("don't know") || 
+    lower.includes('dont know') || 
+    lower.includes('no idea') || 
+    lower.includes('not sure') || 
+    lower.length < 8;
+
+  if (isEvasive) {
     if (turnIndex === 0) {
       return `Welcome to your technical placement interview for the ${role} position! To start, could you introduce yourself, highlight your core technical skills, and share a recent project you built?`;
     }
-    return `Could you expand on that with a concrete technical example from your projects or coursework? Specifically, what tools or data structures did you utilize and how did you verify the implementation?`;
+    return `That's completely fine — placement interviews cover a wide breadth. Let's pivot to a foundational area for ${role}: Could you describe how you approach debugging an unexpected issue or runtime exception in your code, and what tools or logging practices you rely on?`;
   }
-
-  const lower = candidateAnswer.toLowerCase();
 
   // 1. Caching & In-Memory Stores
   if (lower.includes('cache') || lower.includes('redis') || lower.includes('memcached')) {
@@ -1428,7 +1978,23 @@ app.post('/api/code/evaluate', async (req, res) => {
       const exec = await runMultiLanguageCode(language, code, stdinInput, 3500);
 
       const actualTrimmed = exec.stdout.trim().replace(/\r\n/g, '\n');
-      const isPassed = !exec.timedOut && exec.exitCode === 0 && actualTrimmed === expectedOutput;
+      
+      const normalizeVal = (s: string) => {
+        const cleaned = s.trim().replace(/\r\n/g, '\n');
+        try {
+          return JSON.stringify(JSON.parse(cleaned));
+        } catch {
+          // Normalize boolean literals across languages (Python True/False vs JS true/false)
+          if (/^true$/i.test(cleaned)) return 'true';
+          if (/^false$/i.test(cleaned)) return 'false';
+          return cleaned.replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ').toLowerCase();
+        }
+      };
+
+      const isPassed = !exec.timedOut && exec.exitCode === 0 && (
+        actualTrimmed === expectedOutput ||
+        normalizeVal(actualTrimmed) === normalizeVal(expectedOutput)
+      );
 
       if (isPassed) {
         passedCount++;
@@ -1544,7 +2110,7 @@ Instructions:
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',

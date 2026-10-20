@@ -10,6 +10,8 @@ import {
   EtiquetteGuideItem
 } from '../data/interviewPreparationData';
 import { DSA_PRACTICE_TOPICS, DsaTopic, DsaProblem } from '../data/dsaPracticeData';
+import { INITIAL_5_DSA_PROBLEMS, DsaProblemItem } from '../data/dsaStarterBank';
+import confetti from 'canvas-confetti';
 import {
   ROLE_CODING_CHALLENGES,
   RoleCodingChallenge,
@@ -195,10 +197,144 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
   };
 
   // ==================== DSA PRACTICE STATE ====================
-  const [selectedDsaTopic, setSelectedDsaTopic] = useState<DsaTopic>(DSA_PRACTICE_TOPICS[0]);
-  const [selectedDsaProblem, setSelectedDsaProblem] = useState<DsaProblem>(DSA_PRACTICE_TOPICS[0].problems[0]);
-  const [dsaSolutionLang, setDsaSolutionLang] = useState<'python' | 'java' | 'cpp'>('python');
-  const [showDsaSolution, setShowDsaSolution] = useState(false);
+  const dsaProblemsList: DsaProblemItem[] = useMemo(() => db.getDsaProblems(), []);
+  const [selectedDsaProblemItem, setSelectedDsaProblemItem] = useState<DsaProblemItem>(
+    dsaProblemsList[0] || INITIAL_5_DSA_PROBLEMS[0]
+  );
+  const [dsaCategoryFilter, setDsaCategoryFilter] = useState<string>('All');
+  const [dsaLang, setDsaLang] = useState<ProgrammingLanguage>('python');
+  const [dsaCode, setDsaCode] = useState<string>(
+    (dsaProblemsList[0] || INITIAL_5_DSA_PROBLEMS[0]).starterCode.python || ''
+  );
+  const [dsaCustomStdin, setDsaCustomStdin] = useState<string>('');
+  const [isRunningDsaCode, setIsRunningDsaCode] = useState(false);
+  const [isEvaluatingDsaTests, setIsEvaluatingDsaTests] = useState(false);
+  const [dsaRunOutput, setDsaRunOutput] = useState<{
+    stdout?: string;
+    stderr?: string;
+    runtimeError?: string | null;
+    compileError?: string | null;
+    durationMs?: number;
+    exitCode?: number | null;
+    timedOut?: boolean;
+  } | null>(null);
+  const [dsaTestResults, setDsaTestResults] = useState<{
+    allPassed: boolean;
+    passedCount: number;
+    totalCount: number;
+    results: Array<{
+      testCaseIndex: number;
+      input: string;
+      expectedOutput: string;
+      actualOutput: string;
+      passed: boolean;
+      timedOut?: boolean;
+      compileError?: string | null;
+      runtimeError?: string | null;
+      durationMs: number;
+      isHidden: boolean;
+    }>;
+  } | null>(null);
+  const [dsaDetailTab, setDsaDetailTab] = useState<'problem' | 'intuition' | 'complexity' | 'solution'>('problem');
+  const [dsaProgressMap, setDsaProgressMap] = useState<Record<string, any>>(() => db.getDsaProgress());
+
+  const handleSelectDsaProblem = (prob: DsaProblemItem) => {
+    setSelectedDsaProblemItem(prob);
+    const progress = dsaProgressMap[prob.id];
+    const saved = progress?.submittedCode?.[dsaLang];
+    setDsaCode(saved || prob.starterCode[dsaLang] || prob.starterCode.python || '');
+    setDsaRunOutput(null);
+    setDsaTestResults(null);
+    setDsaDetailTab('problem');
+  };
+
+  const handleSelectDsaLanguage = (lang: ProgrammingLanguage) => {
+    setDsaLang(lang);
+    const progress = dsaProgressMap[selectedDsaProblemItem.id];
+    const saved = progress?.submittedCode?.[lang];
+    setDsaCode(saved || selectedDsaProblemItem.starterCode[lang] || selectedDsaProblemItem.starterCode.python || '');
+    setDsaRunOutput(null);
+    setDsaTestResults(null);
+  };
+
+  const handleRunDsaCode = async () => {
+    setIsRunningDsaCode(true);
+    setDsaRunOutput(null);
+    try {
+      const res = await fetch('/api/code/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: dsaLang,
+          code: dsaCode,
+          stdin: dsaCustomStdin,
+        }),
+      });
+      const data = await res.json();
+      setDsaRunOutput(data);
+    } catch (err: any) {
+      setDsaRunOutput({
+        stderr: err?.message || 'Execution request failed.',
+        exitCode: 1,
+      });
+    } finally {
+      setIsRunningDsaCode(false);
+    }
+  };
+
+  const handleEvaluateDsaTestCases = async () => {
+    setIsEvaluatingDsaTests(true);
+    setDsaTestResults(null);
+    setDsaRunOutput(null);
+
+    try {
+      const res = await fetch('/api/code/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: dsaLang,
+          code: dsaCode,
+          testCases: selectedDsaProblemItem.testCases,
+        }),
+      });
+
+      const data = await res.json();
+      setDsaTestResults(data);
+
+      const isAllPassed = Boolean(data.allPassed);
+      const updatedStatus = isAllPassed ? 'Solved' : 'Attempted';
+      const prevProgress = dsaProgressMap[selectedDsaProblemItem.id] || {};
+      const newAttempts = (prevProgress.attemptsCount || 0) + 1;
+      const newSuccesses = (prevProgress.successfulSubmissions || 0) + (isAllPassed ? 1 : 0);
+
+      const updatedProgress = db.updateDsaProgress(selectedDsaProblemItem.id, {
+        status: updatedStatus,
+        attemptsCount: newAttempts,
+        successfulSubmissions: newSuccesses,
+        submittedCode: {
+          ...(prevProgress.submittedCode || {}),
+          [dsaLang]: dsaCode,
+        },
+      });
+
+      setDsaProgressMap((prev) => ({
+        ...prev,
+        [selectedDsaProblemItem.id]: updatedProgress,
+      }));
+
+      if (isAllPassed) {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      }
+    } catch (err: any) {
+      alert(`Test case evaluation failed: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsEvaluatingDsaTests(false);
+    }
+  };
 
   // ==================== INTERVIEW PREP STATE ====================
   const [interviewPrepCategory, setInterviewPrepCategory] = useState<'All' | 'HR & Behavioral' | 'Technical Projects' | 'Career & Culture'>('All');
@@ -653,214 +789,460 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
       )}
 
       {/* ========================================================================= */}
-      {/* 2. DATA STRUCTURES & ALGORITHMS (DSA PRACTICE) */}
+      {/* 2. DATA STRUCTURES & ALGORITHMS (INTERACTIVE CODING WORKSPACE) */}
       {/* ========================================================================= */}
       {activeCategory === 'dsa' && (
         <div className="space-y-6">
-          {/* DSA Topic Selector */}
+          {/* Category Filter Tabs */}
           <div className="flex flex-wrap items-center gap-2">
-            {DSA_PRACTICE_TOPICS.map((topic) => (
+            {['All', 'Arrays & Hashing', 'Two Pointers', 'Sliding Window', 'Stack', 'Binary Search'].map((cat) => (
               <button
-                key={topic.id}
-                onClick={() => {
-                  setSelectedDsaTopic(topic);
-                  setSelectedDsaProblem(topic.problems[0]);
-                  setShowDsaSolution(false);
-                }}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
-                  selectedDsaTopic.id === topic.id
+                key={cat}
+                onClick={() => setDsaCategoryFilter(cat)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  dsaCategoryFilter === cat
                     ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                     : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>{topic.name}</span>
+                {cat}
               </button>
             ))}
           </div>
 
-          {/* Topic Overview Banner */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-                  {selectedDsaTopic.name}
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {selectedDsaTopic.description}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-bold">
-                  {selectedDsaTopic.timeComplexityCheat}
-                </span>
-                <span className="px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 text-xs font-mono font-bold">
-                  {selectedDsaTopic.spaceComplexityCheat}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Master / Detail Split View for DSA Problems */}
+          {/* Master / Detail Split Workspace for DSA Problems */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Problem List */}
             <div className="lg:col-span-4 space-y-3">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block px-1">
-                Problems ({selectedDsaTopic.problems.length})
-              </span>
-              {selectedDsaTopic.problems.map((prob) => {
-                const isSelected = selectedDsaProblem.id === prob.id;
-                return (
-                  <button
-                    key={prob.id}
-                    onClick={() => {
-                      setSelectedDsaProblem(prob);
-                      setShowDsaSolution(false);
-                    }}
-                    className={`w-full p-4 rounded-2xl border text-left transition-all space-y-2 ${
-                      isSelected
-                        ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30 shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        prob.difficulty === 'Easy'
-                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300'
-                          : prob.difficulty === 'Medium'
-                          ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
-                          : 'bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300'
-                      }`}>
-                        {prob.difficulty}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {prob.timeComplexity}
-                      </span>
-                    </div>
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Placement DSA Problems
+                </span>
+                <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                  {Object.values(dsaProgressMap).filter((p: any) => p.status === 'Solved').length} / {dsaProblemsList.length} Solved
+                </span>
+              </div>
 
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2">
-                      {prob.title}
-                    </h4>
+              {dsaProblemsList
+                .filter((p) => dsaCategoryFilter === 'All' || p.category === dsaCategoryFilter)
+                .map((prob) => {
+                  const isSelected = selectedDsaProblemItem.id === prob.id;
+                  const progress = dsaProgressMap[prob.id];
+                  const status = progress?.status || 'Not Started';
 
-                    <div className="flex flex-wrap gap-1">
-                      {prob.companyTags.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
-                          {tag}
+                  return (
+                    <button
+                      key={prob.id}
+                      onClick={() => handleSelectDsaProblem(prob)}
+                      className={`w-full p-4 rounded-2xl border text-left transition-all space-y-2.5 ${
+                        isSelected
+                          ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30 shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            prob.difficulty === 'Easy'
+                              ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300'
+                              : prob.difficulty === 'Medium'
+                              ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
+                              : 'bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300'
+                          }`}>
+                            {prob.difficulty}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {prob.category}
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                          status === 'Solved'
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                            : status === 'Attempted'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        }`}>
+                          {status === 'Solved' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
+                          {status}
                         </span>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        {prob.title}
+                      </h4>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Pattern: <strong className="text-slate-600 dark:text-slate-300">{prob.pattern}</strong></span>
+                        <span className="font-mono">{prob.solution.timeComplexity}</span>
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
 
-            {/* Right Problem Detail & Solution Card */}
-            <div className="lg:col-span-8 p-6 md:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2.5 py-1 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-bold">
-                    {selectedDsaProblem.difficulty}
-                  </span>
-                  <span className="text-xs text-slate-500 font-semibold">
-                    Frequently Asked in: {selectedDsaProblem.companyTags.join(', ')}
-                  </span>
-                </div>
-                <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-                  {selectedDsaProblem.title}
-                </h3>
-              </div>
-
-              {/* Problem Description */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-sans">
-                  {selectedDsaProblem.problemStatement}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs font-mono">
-                  <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Example Input</span>
-                    <span className="text-slate-800 dark:text-slate-200">{selectedDsaProblem.inputExample}</span>
+            {/* Right Problem Detail & Live Code Sandbox */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Problem Detail Card */}
+              <div className="p-6 md:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="px-2.5 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-bold">
+                        {selectedDsaProblemItem.difficulty}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {selectedDsaProblemItem.category} &bull; Pattern: {selectedDsaProblemItem.pattern}
+                      </span>
+                    </div>
+                    <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
+                      {selectedDsaProblemItem.title}
+                    </h3>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Expected Output</span>
-                    <span className="text-slate-800 dark:text-slate-200">{selectedDsaProblem.outputExample}</span>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                      dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved'
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                        : dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Attempted'
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
+                      <span>Status: {dsaProgressMap[selectedDsaProblemItem.id]?.status || 'Not Started'}</span>
+                    </span>
                   </div>
                 </div>
-              </div>
 
-              {/* Algorithmic Complexity Card */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 text-xs space-y-1">
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">Optimal Time Complexity:</span>
-                  <p className="font-mono text-slate-700 dark:text-slate-300">{selectedDsaProblem.timeComplexity}</p>
+                {/* Sub-Tabs: Problem Statement, Hints/Intuition, Complexity, Solution */}
+                <div className="flex flex-wrap gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  {[
+                    { id: 'problem' as const, label: 'Problem Statement' },
+                    { id: 'intuition' as const, label: 'Approach & Intuition' },
+                    { id: 'complexity' as const, label: 'Complexity Analysis' },
+                    { id: 'solution' as const, label: 'Official Solution' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setDsaDetailTab(tab.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        dsaDetailTab === tab.id
+                          ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 text-xs space-y-1">
-                  <span className="font-bold text-blue-700 dark:text-blue-400">Optimal Space Complexity:</span>
-                  <p className="font-mono text-slate-700 dark:text-slate-300">{selectedDsaProblem.spaceComplexity}</p>
-                </div>
-              </div>
 
-              {/* Core Technique */}
-              <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 text-xs space-y-1">
-                <span className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
-                  <Lightbulb className="w-3.5 h-3.5" />
-                  Key Pattern / Technique:
-                </span>
-                <p className="text-slate-700 dark:text-slate-300">{selectedDsaProblem.keyTechnique}</p>
-              </div>
+                {/* 1. Problem Statement View */}
+                {dsaDetailTab === 'problem' && (
+                  <div className="space-y-4 text-xs sm:text-sm">
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line font-sans">
+                      {selectedDsaProblemItem.statement}
+                    </p>
 
-              {/* Solution Accordion */}
-              <div className="space-y-3 pt-2">
-                <button
-                  onClick={() => setShowDsaSolution(!showDsaSolution)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors flex items-center gap-2"
-                >
-                  <Code className="w-4 h-4 text-purple-500" />
-                  <span>{showDsaSolution ? 'Hide Algorithmic Solution' : 'Reveal Step-by-Step & Code Solution'}</span>
-                </button>
+                    {/* Examples */}
+                    <div className="space-y-3">
+                      <span className="font-bold text-xs uppercase tracking-wider text-slate-400 block">
+                        Examples
+                      </span>
+                      {selectedDsaProblemItem.examples.map((ex, idx) => (
+                        <div key={idx} className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs font-mono">
+                          <p className="text-slate-700 dark:text-slate-300 font-sans">
+                            <strong className="text-slate-900 dark:text-white">Example {idx + 1}:</strong>
+                          </p>
+                          <div className="text-slate-600 dark:text-slate-300">
+                            <strong>Input:</strong> {ex.input}
+                          </div>
+                          <div className="text-slate-600 dark:text-slate-300">
+                            <strong>Output:</strong> {ex.output}
+                          </div>
+                          {ex.explanation && (
+                            <p className="text-slate-500 font-sans text-[11px] pt-1">
+                              <strong>Explanation:</strong> {ex.explanation}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
 
-                {showDsaSolution && (
-                  <div className="space-y-4 animate-in fade-in duration-150">
-                    {/* Step by step explanation */}
+                    {/* Constraints */}
+                    {selectedDsaProblemItem.constraints && selectedDsaProblemItem.constraints.length > 0 && (
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-xs">
+                        <span className="font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                          Constraints
+                        </span>
+                        <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                          {selectedDsaProblemItem.constraints.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Approach & Intuition View */}
+                {dsaDetailTab === 'intuition' && (
+                  <div className="space-y-4 text-xs sm:text-sm animate-in fade-in duration-150">
+                    <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-2">
+                      <span className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                        <Lightbulb className="w-4 h-4" /> Intuition &amp; Pattern
+                      </span>
+                      <p className="text-slate-700 dark:text-slate-200 leading-relaxed font-sans">
+                        {selectedDsaProblemItem.solution.intuition}
+                      </p>
+                    </div>
+
                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                        Optimal Derivation Steps:
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider block">
+                        Algorithmic Approach
+                      </span>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                        {selectedDsaProblemItem.solution.approach}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider block">
+                        Key Engineering Takeaways:
                       </span>
                       <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                        {selectedDsaProblem.solutionExplanation.map((step, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
+                        {selectedDsaProblemItem.solution.keyTakeaways.map((takeaway, i) => (
+                          <li key={i} className="flex items-start gap-2">
                             <CheckCircle2 className="w-3.5 h-3.5 text-purple-500 shrink-0 mt-0.5" />
-                            <span>{step}</span>
+                            <span>{takeaway}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
+                  </div>
+                )}
 
-                    {/* Language Switcher for Code */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        {(['python', 'java', 'cpp'] as const).map((lang) => (
-                          <button
-                            key={lang}
-                            onClick={() => setDsaSolutionLang(lang)}
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize ${
-                              dsaSolutionLang === lang
-                                ? 'bg-purple-600 text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}
-                          >
-                            {lang === 'cpp' ? 'C++' : lang}
-                          </button>
-                        ))}
+                {/* 3. Complexity Analysis View */}
+                {dsaDetailTab === 'complexity' && (
+                  <div className="space-y-4 text-xs sm:text-sm animate-in fade-in duration-150">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 space-y-2">
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs uppercase tracking-wider block">
+                          Time Complexity
+                        </span>
+                        <div className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-300">
+                          {selectedDsaProblemItem.solution.timeComplexity}
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {selectedDsaProblemItem.solution.timeExplanation}
+                        </p>
                       </div>
 
-                      <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto">
-                        {dsaSolutionLang === 'python'
-                          ? selectedDsaProblem.pythonCode
-                          : dsaSolutionLang === 'java'
-                          ? selectedDsaProblem.javaCode
-                          : selectedDsaProblem.cppCode}
-                      </pre>
+                      <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 space-y-2">
+                        <span className="font-bold text-blue-700 dark:text-blue-400 text-xs uppercase tracking-wider block">
+                          Space Complexity
+                        </span>
+                        <div className="text-lg font-mono font-bold text-blue-600 dark:text-blue-300">
+                          {selectedDsaProblemItem.solution.spaceComplexity}
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {selectedDsaProblemItem.solution.spaceExplanation}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Official Solution View */}
+                {dsaDetailTab === 'solution' && (
+                  <div className="space-y-3 animate-in fade-in duration-150">
+                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto leading-relaxed">
+                      {selectedDsaProblemItem.solutionCode[dsaLang] || selectedDsaProblemItem.solutionCode.python}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              {/* Responsive Code Editor & Execution Runner Card */}
+              <div className="p-6 md:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
+                      solution.{dsaLang === 'python' ? 'py' : dsaLang === 'javascript' ? 'js' : dsaLang === 'c' ? 'c' : dsaLang === 'cpp' ? 'cpp' : 'java'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={dsaLang}
+                      onChange={(e) => handleSelectDsaLanguage(e.target.value as ProgrammingLanguage)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="python">Python 3</option>
+                      <option value="javascript">JavaScript (Node.js)</option>
+                      <option value="java">Java (OpenJDK)</option>
+                      <option value="cpp">C++ (g++ 17)</option>
+                      <option value="c">C (gcc)</option>
+                    </select>
+
+                    <button
+                      onClick={() => setDsaCode(selectedDsaProblemItem.starterCode[dsaLang] || '')}
+                      className="text-xs text-blue-500 hover:underline"
+                    >
+                      Reset Starter Code
+                    </button>
+                  </div>
+                </div>
+
+                {/* Code Textarea Editor */}
+                <textarea
+                  rows={14}
+                  value={dsaCode}
+                  onChange={(e) => setDsaCode(e.target.value)}
+                  className="w-full p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs sm:text-sm focus:outline-hidden focus:border-purple-500 leading-relaxed resize-y"
+                  spellCheck={false}
+                />
+
+                {/* Custom Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Custom Standard Input (stdin for test run)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={dsaCustomStdin}
+                    onChange={(e) => setDsaCustomStdin(e.target.value)}
+                    placeholder="e.g. [2, 7, 11, 15], 9"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                {/* Execution Controls */}
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    onClick={handleRunDsaCode}
+                    disabled={isRunningDsaCode || isEvaluatingDsaTests}
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2"
+                  >
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>{isRunningDsaCode ? 'Running...' : 'Run Custom Code'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleEvaluateDsaTestCases}
+                    disabled={isRunningDsaCode || isEvaluatingDsaTests}
+                    className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-md shadow-purple-600/20"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isEvaluatingDsaTests ? 'Evaluating All Test Cases...' : 'Submit & Run All Test Cases'}</span>
+                  </button>
+                </div>
+
+                {/* Terminal Output */}
+                {dsaRunOutput && (
+                  <div className="space-y-2 pt-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-slate-700 dark:text-slate-300">Terminal Output:</span>
+                      {dsaRunOutput.durationMs !== undefined && (
+                        <span className="text-slate-400 flex items-center gap-1 font-mono">
+                          <Clock className="w-3 h-3" /> {dsaRunOutput.durationMs}ms
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-200 overflow-x-auto whitespace-pre-wrap">
+                      {dsaRunOutput.compileError && (
+                        <span className="text-rose-400 font-bold block mb-1">
+                          Compilation Error:{'\n' + dsaRunOutput.compileError}
+                        </span>
+                      )}
+                      {dsaRunOutput.runtimeError && (
+                        <span className="text-rose-400 block mb-1">
+                          Runtime Error:{'\n' + dsaRunOutput.runtimeError}
+                        </span>
+                      )}
+                      {dsaRunOutput.stdout && (
+                        <span className="text-emerald-400 block">
+                          {dsaRunOutput.stdout}
+                        </span>
+                      )}
+                      {!dsaRunOutput.stdout && !dsaRunOutput.compileError && !dsaRunOutput.runtimeError && (
+                        <span className="text-slate-500 italic">Program finished cleanly with exit code 0 and no output.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Test Cases Results Breakdown */}
+                {dsaTestResults && (
+                  <div className="space-y-3 pt-3 animate-in fade-in duration-150">
+                    <div className={`p-4 rounded-xl border text-xs flex items-center justify-between ${
+                      dsaTestResults.allPassed
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                        : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {dsaTestResults.allPassed ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                        )}
+                        <span className="font-bold text-sm">
+                          {dsaTestResults.allPassed
+                            ? `All Test Cases Passed! (${dsaTestResults.passedCount}/${dsaTestResults.totalCount})`
+                            : `Test Case Verification Failed (${dsaTestResults.passedCount}/${dsaTestResults.totalCount} passed)`}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold">
+                        {dsaTestResults.allPassed ? 'Marked as Solved' : 'Keep Trying'}
+                      </span>
+                    </div>
+
+                    {/* Detailed Test Case Cards */}
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {dsaTestResults.results.map((r) => (
+                        <div
+                          key={r.testCaseIndex}
+                          className={`p-3.5 rounded-xl border text-xs font-mono space-y-1.5 ${
+                            r.passed
+                              ? 'bg-emerald-500/5 border-emerald-500/20 text-slate-800 dark:text-slate-200'
+                              : 'bg-rose-500/5 border-rose-500/20 text-slate-800 dark:text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between font-sans">
+                            <span className="font-bold flex items-center gap-1.5">
+                              {r.passed ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                              )}
+                              Test Case {r.testCaseIndex} {r.isHidden && <span className="text-[10px] text-purple-500 font-semibold font-mono">(Hidden)</span>}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              r.passed ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                            }`}>
+                              {r.passed ? 'Passed' : r.timedOut ? 'Time Limit Exceeded' : r.compileError ? 'Compilation Error' : r.runtimeError ? 'Runtime Error' : 'Failed'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                            <div>
+                              <span className="text-slate-400 block font-sans">Input:</span>
+                              <span className="text-slate-700 dark:text-slate-300">{r.input}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block font-sans">Expected Output:</span>
+                              <span className="text-slate-700 dark:text-slate-300">{r.expectedOutput}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block font-sans">Actual Output:</span>
+                              <span className={r.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                                {r.actualOutput}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

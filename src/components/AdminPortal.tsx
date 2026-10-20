@@ -1034,11 +1034,69 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     max={95}
                     value={config.qualificationThreshold}
                     onChange={(e) => handleUpdatePassMark(parseInt(e.target.value) || 70)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Score required on the diagnostic assessment to qualify for the official placement interview.
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Assessment Attempt Cooldown Period (Minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={config.cooldownMinutes ?? 120}
+                    onChange={(e) => {
+                      const minutes = parseInt(e.target.value) || 0;
+                      const updated = db.updateConfig({ cooldownMinutes: minutes });
+                      setConfig(updated);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Waiting period enforced on the backend between successive assessment attempts (e.g. 120 mins = 2 hours).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Assessment Time Duration (Minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={180}
+                    value={config.assessmentTimeMinutes}
+                    onChange={(e) => {
+                      const mins = parseInt(e.target.value) || 30;
+                      const updated = db.updateConfig({ assessmentTimeMinutes: mins });
+                      setConfig(updated);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Standard countdown timer allotted for each diagnostic assessment sitting.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+                  <div>
+                    <h5 className="font-semibold text-slate-800 dark:text-slate-200 text-xs">Tab Switch &amp; Blur Proctoring</h5>
+                    <p className="text-[11px] text-slate-400">Detect student tab switching or exiting fullscreen during assessments.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={config.suspiciousActivityDetection}
+                    onChange={(e) => {
+                      const updated = db.updateConfig({ suspiciousActivityDetection: e.target.checked });
+                      setConfig(updated);
+                    }}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 dark:border-slate-700"
+                  />
                 </div>
               </div>
             </div>
