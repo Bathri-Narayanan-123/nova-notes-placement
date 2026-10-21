@@ -1,0 +1,32 @@
+[
+  {
+    "id": "audit_1792505909392_z3jc",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "candidate_1792505908984@university.edu",
+    "details": {
+      "userId": "usr_1792505909158_13ry6",
+      "role": "student"
+    },
+    "timestamp": "2026-10-20T14:18:29.392Z"
+  },
+  {
+    "id": "audit_1792505909287_wn93",
+    "action": "USER_REGISTERED_VERIFIED",
+    "performedBy": "candidate_1792505908984@university.edu",
+    "details": {
+      "userId": "usr_1792505909158_13ry6",
+      "role": "student"
+    },
+    "timestamp": "2026-10-20T14:18:29.287Z"
+  },
+  {
+    "id": "audit_1792505909241_k5bi",
+    "action": "SIGNUP_VERIFICATION_SENT",
+    "performedBy": "candidate_1792505908984@university.edu",
+    "details": {
+      "email": "candidate_1792505908984@university.edu",
+      "expiresMinutes": 10
+    },
+    "timestamp": "2026-10-20T14:18:29.241Z"
+  }
+]

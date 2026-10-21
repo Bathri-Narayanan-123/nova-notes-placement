@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   Award, 
@@ -13,7 +13,12 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
-  ListChecks
+  ListChecks,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  RotateCcw
 } from 'lucide-react';
 import { AssessmentAttempt, UserProfile } from '../types';
 import { db } from '../services/db';
@@ -24,6 +29,42 @@ interface ProgressViewProps {
 }
 
 export const ProgressView: React.FC<ProgressViewProps> = ({ profile, attempts }) => {
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'qualified' | 'not-qualified'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest');
+  const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
+
+  // Extract distinct roles from attempts
+  const availableRoles = useMemo(() => {
+    const roles = new Set<string>();
+    attempts.forEach((a) => {
+      if (a.role) roles.add(a.role);
+    });
+    return Array.from(roles);
+  }, [attempts]);
+
+  // Filtered and sorted attempts
+  const filteredAttempts = useMemo(() => {
+    let list = attempts.filter((att) => {
+      if (roleFilter !== 'all' && att.role !== roleFilter) return false;
+      if (statusFilter === 'qualified' && !att.isQualified) return false;
+      if (statusFilter === 'not-qualified' && att.isQualified) return false;
+      return true;
+    });
+
+    return [...list].sort((a, b) => {
+      if (sortOrder === 'oldest') {
+        return a.attemptNumber - b.attemptNumber;
+      }
+      if (sortOrder === 'highest') {
+        return b.score - a.score;
+      }
+      if (sortOrder === 'lowest') {
+        return a.score - b.score;
+      }
+      return b.attemptNumber - a.attemptNumber;
+    });
+  }, [attempts, roleFilter, statusFilter, sortOrder]);
   // Calculate dynamic skill performance based strictly on real assessment attempts
   const skills = useMemo(() => {
     if (!attempts || attempts.length === 0) {
@@ -243,46 +284,205 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ profile, attempts })
 
       {/* Split Cards: Assessment History & Skill Performance (Page 6) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Assessment History */}
+        {/* Left: Assessment History with Cross-Role Retention and Filtering */}
         <div 
           id="assessment-history-card"
           className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4"
         >
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Assessment History
-          </h2>
-
-          <div className="space-y-3">
-            {attempts.map((attempt) => (
-              <div
-                key={attempt.id}
-                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between"
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Assessment History</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-medium">
+                  {filteredAttempts.length} of {attempts.length}
+                </span>
+              </h2>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                Retained permanently across all job roles and assessment attempts.
+              </p>
+            </div>
+            {attempts.length > 0 && (
+              <button
+                onClick={() => {
+                  setRoleFilter('all');
+                  setStatusFilter('all');
+                  setSortOrder('newest');
+                }}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 self-start sm:self-center"
               >
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                    Attempt {attempt.attemptNumber} · {attempt.role}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {attempt.date} · {attempt.durationMinutes} min
-                  </p>
-                </div>
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
 
-                <div className="text-right">
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
-                    {attempt.score}%
-                  </span>
-                  <div className="mt-0.5">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                      attempt.isQualified
-                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'
-                        : 'bg-rose-50 dark:bg-rose-950 text-rose-600'
-                    }`}>
-                      {attempt.isQualified ? 'Qualified' : 'Not qualified'}
-                    </span>
-                  </div>
-                </div>
+          {/* Filtering Controls */}
+          {attempts.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              {/* Role Filter */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                  Job Role
+                </label>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="all">All Job Roles ({availableRoles.length})</option>
+                  {availableRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ))}
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                  Status
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="all">All Outcomes</option>
+                  <option value="qualified">Qualified (&ge; 70%)</option>
+                  <option value="not-qualified">Not Qualified (&lt; 70%)</option>
+                </select>
+              </div>
+
+              {/* Sort Order */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                  Sort Order
+                </label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="highest">Highest Score</option>
+                  <option value="lowest">Lowest Score</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Attempt List */}
+          <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+            {filteredAttempts.length === 0 ? (
+              <div className="p-8 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-center space-y-2">
+                <HelpCircle className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  {attempts.length === 0 ? 'No assessment attempts recorded yet.' : 'No assessments match the selected filters.'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {attempts.length === 0 
+                    ? 'Complete your first diagnostic test to establish your baseline.' 
+                    : 'Try selecting All Job Roles or All Outcomes to view past attempts.'}
+                </p>
+              </div>
+            ) : (
+              filteredAttempts.map((attempt) => {
+                const isExpanded = expandedAttemptId === attempt.id;
+                return (
+                  <div
+                    key={attempt.id}
+                    className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 transition-all hover:border-slate-300 dark:hover:border-slate-700"
+                  >
+                    <div 
+                      onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
+                      className="flex items-center justify-between cursor-pointer"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            Attempt #{attempt.attemptNumber}
+                          </p>
+                          <span className="text-xs px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-medium">
+                            {attempt.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {attempt.date} · {attempt.durationMinutes} min · {attempt.totalQuestions || 39} Questions
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white">
+                            {attempt.score}%
+                          </span>
+                          <div className="mt-0.5">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                              attempt.isQualified
+                                ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'
+                                : 'bg-rose-50 dark:bg-rose-950 text-rose-600'
+                            }`}>
+                              {attempt.isQualified ? 'Qualified' : 'Not qualified'}
+                            </span>
+                          </div>
+                        </div>
+                        <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expandable Drilldown Breakdown */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2.5 animate-in fade-in duration-150 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                          <div className="p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 block">MCQs</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{attempt.mcqScore ?? 0} / 15</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 block">Aptitude</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{attempt.aptitudeScore ?? 0} / 10</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 block">Pseudocode</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{attempt.pseudoScore ?? 0} / 10</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 block">Coding Tasks</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{attempt.codingScore ?? 0} / 4</span>
+                          </div>
+                        </div>
+
+                        {attempt.strongTopics && attempt.strongTopics.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mr-1">Strong:</span>
+                            {attempt.strongTopics.map((topic, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[11px]">
+                                {topic}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {attempt.weakTopics && attempt.weakTopics.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 mr-1">Focus Areas:</span>
+                            {attempt.weakTopics.map((topic, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[11px]">
+                                {topic}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

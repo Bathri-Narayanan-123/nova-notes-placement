@@ -8,8 +8,7 @@ import {
   Calendar, 
   ArrowRight, 
   CheckCircle2, 
-  AlertTriangle,
-  Layers
+  AlertTriangle
 } from 'lucide-react';
 import { AssessmentAttempt, UserProfile } from '../types';
 import { NavTab } from './Sidebar';
@@ -27,7 +26,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   setActiveTab,
 }) => {
   const isInterviewLocked = profile.interviewStatus === 'locked';
-  const dsaSummary = db.getDsaSummary();
 
   // Format progress bar color
   const getReadinessColor = (val: number) => {
@@ -48,8 +46,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </p>
       </div>
 
-      {/* Top Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Top Metric Cards (4 Balanced Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Current Role */}
         <div 
           id="metric-current-role"
@@ -57,7 +55,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs cursor-pointer hover:border-blue-500/50 transition-all"
         >
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Current Role
+            Target Role
           </span>
           <div className="mt-3 flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -76,7 +74,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs cursor-pointer hover:border-blue-500/50 transition-all"
         >
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Assessment
+            Diagnostic Assessment
           </span>
           <div className="mt-3 flex items-center gap-2">
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/60">
@@ -85,35 +83,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: DSA Progress */}
-        <div 
-          id="metric-dsa-progress"
-          onClick={() => setActiveTab('practice')}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs cursor-pointer hover:border-purple-500/50 transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              DSA Practice
-            </span>
-            <Layers className="w-4 h-4 text-purple-500" />
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl font-bold text-slate-900 dark:text-white">
-              {dsaSummary.solved} / {dsaSummary.total}
-            </span>
-            <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
-              {Math.round((dsaSummary.solved / Math.max(1, dsaSummary.total)) * 100)}% Solved
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-            <div 
-              className="h-full rounded-full bg-purple-600 transition-all duration-500"
-              style={{ width: `${(dsaSummary.solved / Math.max(1, dsaSummary.total)) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Card 4: Mock Interview */}
+        {/* Card 3: Mock Interview */}
         <div 
           id="metric-interview"
           onClick={() => setActiveTab('interview')}
@@ -134,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 5: Placement Readiness */}
+        {/* Card 4: Placement Readiness */}
         <div 
           id="metric-readiness"
           onClick={() => setActiveTab('progress')}

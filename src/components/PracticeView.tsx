@@ -236,6 +236,8 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     }>;
   } | null>(null);
   const [dsaDetailTab, setDsaDetailTab] = useState<'problem' | 'intuition' | 'complexity' | 'solution'>('problem');
+  const [showDsaSolution, setShowDsaSolution] = useState(false);
+  const [dsaMobileActiveView, setDsaMobileActiveView] = useState<'problem' | 'code'>('problem');
   const [dsaProgressMap, setDsaProgressMap] = useState<Record<string, any>>(() => db.getDsaProgress());
 
   const handleSelectDsaProblem = (prob: DsaProblemItem) => {
@@ -246,6 +248,8 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
     setDsaRunOutput(null);
     setDsaTestResults(null);
     setDsaDetailTab('problem');
+    setShowDsaSolution(false);
+    setDsaMobileActiveView('problem');
   };
 
   const handleSelectDsaLanguage = (lang: ProgrammingLanguage) => {
@@ -810,19 +814,19 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
             ))}
           </div>
 
-          {/* Master / Detail Split Workspace for DSA Problems */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Problem List */}
-            <div className="lg:col-span-4 space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Placement DSA Problems
-                </span>
-                <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
-                  {Object.values(dsaProgressMap).filter((p: any) => p.status === 'Solved').length} / {dsaProblemsList.length} Solved
-                </span>
-              </div>
+          {/* Problem Selector Bar & Quick Nav */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-purple-500" />
+                Select DSA Practice Problem
+              </span>
+              <span className="text-xs text-purple-600 dark:text-purple-400 font-bold">
+                {Object.values(dsaProgressMap).filter((p: any) => p.status === 'Solved').length} / {dsaProblemsList.length} Solved
+              </span>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {dsaProblemsList
                 .filter((p) => dsaCategoryFilter === 'All' || p.category === dsaCategoryFilter)
                 .map((prob) => {
@@ -834,112 +838,135 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                     <button
                       key={prob.id}
                       onClick={() => handleSelectDsaProblem(prob)}
-                      className={`w-full p-4 rounded-2xl border text-left transition-all space-y-2.5 ${
+                      className={`p-3 rounded-xl border text-left transition-all space-y-1.5 ${
                         isSelected
-                          ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30 shadow-xs'
-                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                          ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/40 shadow-xs ring-1 ring-purple-500/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            prob.difficulty === 'Easy'
-                              ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300'
-                              : prob.difficulty === 'Medium'
-                              ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
-                              : 'bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300'
-                          }`}>
-                            {prob.difficulty}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {prob.category}
-                          </span>
-                        </div>
-
-                        {/* Status Badge */}
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
-                          status === 'Solved'
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                            : status === 'Attempted'
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                          prob.difficulty === 'Easy'
+                            ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+                            : prob.difficulty === 'Medium'
+                            ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
+                            : 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300'
                         }`}>
-                          {status === 'Solved' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                          {status}
+                          {prob.difficulty}
                         </span>
+                        {status === 'Solved' ? (
+                          <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Solved
+                          </span>
+                        ) : status === 'Attempted' ? (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                            Attempted
+                          </span>
+                        ) : null}
                       </div>
 
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                         {prob.title}
                       </h4>
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Pattern: <strong className="text-slate-600 dark:text-slate-300">{prob.pattern}</strong></span>
-                        <span className="font-mono">{prob.solution.timeComplexity}</span>
-                      </div>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {prob.category}
+                      </p>
                     </button>
                   );
                 })}
             </div>
+          </div>
 
-            {/* Right Problem Detail & Live Code Sandbox */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Problem Detail Card */}
-              <div className="p-6 md:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="px-2.5 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-bold">
-                        {selectedDsaProblemItem.difficulty}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-500">
-                        {selectedDsaProblemItem.category} &bull; Pattern: {selectedDsaProblemItem.pattern}
-                      </span>
-                    </div>
-                    <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
-                      {selectedDsaProblemItem.title}
-                    </h3>
-                  </div>
+          {/* Responsive Mobile / Tablet Tab Switcher */}
+          <div className="flex lg:hidden items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => setDsaMobileActiveView('problem')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                dsaMobileActiveView === 'problem'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Problem Description</span>
+            </button>
+            <button
+              onClick={() => setDsaMobileActiveView('code')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                dsaMobileActiveView === 'code'
+                  ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Code Editor &amp; Run</span>
+            </button>
+          </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                      dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved'
-                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                        : dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Attempted'
-                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                    }`}>
-                      {dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
-                      <span>Status: {dsaProgressMap[selectedDsaProblemItem.id]?.status || 'Not Started'}</span>
+          {/* Desktop Split-Screen Layout: Problem Panel on Left (50%), Code Editor on Right (50%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            
+            {/* ==================== LEFT PANEL: PROBLEM DESCRIPTION ==================== */}
+            <div className={`p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5 max-h-[760px] flex flex-col ${
+              dsaMobileActiveView === 'code' ? 'hidden lg:flex' : 'flex'
+            }`}>
+              {/* Problem Title & Status Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-bold">
+                      {selectedDsaProblemItem.difficulty}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {selectedDsaProblemItem.category} &bull; Pattern: {selectedDsaProblemItem.pattern}
                     </span>
                   </div>
+                  <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
+                    {selectedDsaProblemItem.title}
+                  </h3>
                 </div>
 
-                {/* Sub-Tabs: Problem Statement, Hints/Intuition, Complexity, Solution */}
-                <div className="flex flex-wrap gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  {[
-                    { id: 'problem' as const, label: 'Problem Statement' },
-                    { id: 'intuition' as const, label: 'Approach & Intuition' },
-                    { id: 'complexity' as const, label: 'Complexity Analysis' },
-                    { id: 'solution' as const, label: 'Official Solution' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setDsaDetailTab(tab.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        dsaDetailTab === tab.id
-                          ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                    dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      : dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Attempted'
+                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}>
+                    {dsaProgressMap[selectedDsaProblemItem.id]?.status === 'Solved' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : null}
+                    <span>{dsaProgressMap[selectedDsaProblemItem.id]?.status || 'Not Started'}</span>
+                  </span>
                 </div>
+              </div>
 
+              {/* Sub-Tabs: Problem Statement, Hints/Intuition, Complexity, Solution */}
+              <div className="flex flex-wrap gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+                {[
+                  { id: 'problem' as const, label: 'Problem Statement' },
+                  { id: 'intuition' as const, label: 'Approach & Intuition' },
+                  { id: 'complexity' as const, label: 'Complexity Analysis' },
+                  { id: 'solution' as const, label: 'Official Solution' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setDsaDetailTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      dsaDetailTab === tab.id
+                        ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Scrollable Problem Body */}
+              <div className="flex-1 overflow-y-auto pr-2 space-y-4 text-xs sm:text-sm">
                 {/* 1. Problem Statement View */}
                 {dsaDetailTab === 'problem' && (
-                  <div className="space-y-4 text-xs sm:text-sm">
+                  <div className="space-y-4">
                     <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line font-sans">
                       {selectedDsaProblemItem.statement}
                     </p>
@@ -982,12 +1009,23 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                         </ul>
                       </div>
                     )}
+
+                    {/* Prominent Quick Action Button for Mobile */}
+                    <div className="pt-2 lg:hidden">
+                      <button
+                        onClick={() => setDsaMobileActiveView('code')}
+                        className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
+                      >
+                        <Code2 className="w-4 h-4" />
+                        <span>Write Code in Editor &rarr;</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {/* 2. Approach & Intuition View */}
                 {dsaDetailTab === 'intuition' && (
-                  <div className="space-y-4 text-xs sm:text-sm animate-in fade-in duration-150">
+                  <div className="space-y-4 animate-in fade-in duration-150">
                     <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-2">
                       <span className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 text-xs uppercase tracking-wider">
                         <Lightbulb className="w-4 h-4" /> Intuition &amp; Pattern
@@ -1024,7 +1062,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
 
                 {/* 3. Complexity Analysis View */}
                 {dsaDetailTab === 'complexity' && (
-                  <div className="space-y-4 text-xs sm:text-sm animate-in fade-in duration-150">
+                  <div className="space-y-4 animate-in fade-in duration-150">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 space-y-2">
                         <span className="font-bold text-emerald-700 dark:text-emerald-400 text-xs uppercase tracking-wider block">
@@ -1053,55 +1091,95 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                   </div>
                 )}
 
-                {/* 4. Official Solution View */}
+                {/* 4. Official Solution View: KEPT HIDDEN UNTIL EXPLICITLY REQUESTED */}
                 {dsaDetailTab === 'solution' && (
                   <div className="space-y-3 animate-in fade-in duration-150">
-                    <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto leading-relaxed">
-                      {selectedDsaProblemItem.solutionCode[dsaLang] || selectedDsaProblemItem.solutionCode.python}
-                    </pre>
+                    {!showDsaSolution ? (
+                      <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-center space-y-3">
+                        <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            Reference Solution Hidden
+                          </h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                            To build genuine algorithmic problem-solving skills, we recommend writing and testing your own solution first.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowDsaSolution(true)}
+                          className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-all shadow-xs"
+                        >
+                          Show Reference Solution
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            Verified Reference Implementation ({dsaLang.toUpperCase()})
+                          </span>
+                          <button
+                            onClick={() => setShowDsaSolution(false)}
+                            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
+                          >
+                            Hide Solution
+                          </button>
+                        </div>
+                        <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto leading-relaxed">
+                          {selectedDsaProblemItem.solutionCode[dsaLang] || selectedDsaProblemItem.solutionCode.python}
+                        </pre>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Responsive Code Editor & Execution Runner Card */}
-              <div className="p-6 md:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
-                      solution.{dsaLang === 'python' ? 'py' : dsaLang === 'javascript' ? 'js' : dsaLang === 'c' ? 'c' : dsaLang === 'cpp' ? 'cpp' : 'java'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={dsaLang}
-                      onChange={(e) => handleSelectDsaLanguage(e.target.value as ProgrammingLanguage)}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    >
-                      <option value="python">Python 3</option>
-                      <option value="javascript">JavaScript (Node.js)</option>
-                      <option value="java">Java (OpenJDK)</option>
-                      <option value="cpp">C++ (g++ 17)</option>
-                      <option value="c">C (gcc)</option>
-                    </select>
-
-                    <button
-                      onClick={() => setDsaCode(selectedDsaProblemItem.starterCode[dsaLang] || '')}
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      Reset Starter Code
-                    </button>
-                  </div>
+            {/* ==================== RIGHT PANEL: RESPONSIVE CODE EDITOR & RUNNER ==================== */}
+            <div className={`p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 max-h-[760px] flex flex-col ${
+              dsaMobileActiveView === 'problem' ? 'hidden lg:flex' : 'flex'
+            }`}>
+              {/* Editor Header Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
+                    solution.{dsaLang === 'python' ? 'py' : dsaLang === 'javascript' ? 'js' : dsaLang === 'c' ? 'c' : dsaLang === 'cpp' ? 'cpp' : 'java'}
+                  </span>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <select
+                    value={dsaLang}
+                    onChange={(e) => handleSelectDsaLanguage(e.target.value as ProgrammingLanguage)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="python">Python 3</option>
+                    <option value="javascript">JavaScript (Node.js)</option>
+                    <option value="java">Java (OpenJDK)</option>
+                    <option value="cpp">C++ (g++ 17)</option>
+                    <option value="c">C (gcc)</option>
+                  </select>
+
+                  <button
+                    onClick={() => setDsaCode(selectedDsaProblemItem.starterCode[dsaLang] || selectedDsaProblemItem.starterCode.python || '')}
+                    className="text-xs text-blue-500 hover:underline"
+                  >
+                    Reset Code
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Editor & Execution Area */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3.5">
                 {/* Code Textarea Editor */}
                 <textarea
-                  rows={14}
+                  rows={13}
                   value={dsaCode}
                   onChange={(e) => setDsaCode(e.target.value)}
-                  className="w-full p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs sm:text-sm focus:outline-hidden focus:border-purple-500 leading-relaxed resize-y"
+                  className="w-full p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs sm:text-sm focus:outline-hidden focus:border-purple-500 leading-relaxed resize-y min-h-[220px]"
                   spellCheck={false}
+                  placeholder="// Write your solution here..."
                 />
 
                 {/* Custom Input */}
@@ -1248,6 +1326,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ profile, roles }) =>
                 )}
               </div>
             </div>
+
           </div>
         </div>
       )}

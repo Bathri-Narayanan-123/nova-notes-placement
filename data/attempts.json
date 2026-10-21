@@ -1,0 +1,57 @@
+{
+  "usr_admin_101": [
+    {
+      "id": "att-admin-6",
+      "attemptNumber": 6,
+      "studentId": "usr_admin_101",
+      "role": "Python Developer",
+      "date": "9/7/2026",
+      "timestamp": "2026-10-15T12:54:49.151Z",
+      "score": 85,
+      "percentage": 85,
+      "isQualified": true,
+      "mcqScore": 14,
+      "aptitudeScore": 9,
+      "pseudoScore": 8,
+      "codingScore": 4,
+      "totalQuestions": 39,
+      "correctCount": 35,
+      "durationMinutes": 24,
+      "questions": [],
+      "answers": {},
+      "topicBreakdown": {
+        "Python": {
+          "total": 15,
+          "correct": 14,
+          "percentage": 93
+        },
+        "DSA": {
+          "total": 10,
+          "correct": 9,
+          "percentage": 90
+        },
+        "SQL": {
+          "total": 10,
+          "correct": 8,
+          "percentage": 80
+        },
+        "SystemArchitecture": {
+          "total": 4,
+          "correct": 4,
+          "percentage": 100
+        }
+      },
+      "weakTopics": [
+        "SQL Optimization"
+      ],
+      "strongTopics": [
+        "Python",
+        "DSA",
+        "System Architecture"
+      ],
+      "isAdaptive": true,
+      "status": "Qualified"
+    }
+  ],
+  "usr_1792505909158_13ry6": []
+}

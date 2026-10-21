@@ -34,5 +34,18 @@
     "themePreference": "light",
     "createdAt": "2026-10-07T04:32:39.267Z",
     "updatedAt": "2026-10-07T04:32:57.350Z"
+  },
+  "candidate_1792505908984@university.edu": {
+    "id": "usr_1792505909158_13ry6",
+    "email": "candidate_1792505908984@university.edu",
+    "fullName": "Arun Kumar",
+    "role": "student",
+    "college": "PSG College of Technology",
+    "salt": "6dd9f445d1f10fda001eb58697da621a",
+    "passwordHash": "e71168d0c81b1db541ce58e2b43107b082ecdf46147f2e419249cde7b86be569350e670e52289385adeb3891f87c1dffac136288ed4ffe5bdcad78d49d75ddb1",
+    "themePreference": "light",
+    "createdAt": "2026-10-20T14:18:29.240Z",
+    "updatedAt": "2026-10-20T14:18:29.264Z",
+    "isEmailVerified": true
   }
 }

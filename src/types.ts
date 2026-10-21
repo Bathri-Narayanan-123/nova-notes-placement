@@ -1,4 +1,4 @@
-export type UserRole = 'student' | 'admin';
+export type UserRole = 'student' | 'staff' | 'admin';
 
 export type QuestionType = 'MCQ' | 'MSQ' | 'APTITUDE' | 'PSEUDOCODE' | 'CODING';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
@@ -146,6 +146,19 @@ export interface InterviewAttempt {
   isDirectTest?: boolean;
 }
 
+export interface StaffAssignment {
+  id: string;
+  title: string;
+  targetRole: string;
+  studentId?: string;
+  studentName?: string;
+  deadline: string;
+  instructions?: string;
+  createdAt: string;
+  assignedBy: string;
+  status: 'pending' | 'completed';
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -168,6 +181,8 @@ export interface UserProfile {
   interviewStatus: 'locked' | 'unlocked' | 'completed';
   strongSkills: string[];
   needsImprovement: string[];
+  isEmailVerified?: boolean;
+  assignments?: StaffAssignment[];
 }
 
 export interface SystemConfig {

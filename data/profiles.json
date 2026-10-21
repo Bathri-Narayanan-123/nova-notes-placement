@@ -80,5 +80,29 @@
       "OOP"
     ],
     "updatedAt": "2026-10-07T04:32:57.350Z"
+  },
+  "usr_1792505909158_13ry6": {
+    "id": "usr_1792505909158_13ry6",
+    "email": "candidate_1792505908984@university.edu",
+    "fullName": "Arun Kumar",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "PSG College of Technology",
+    "themePreference": "light",
+    "memberSince": "10/20/2026",
+    "placementReadiness": 0,
+    "sessionsCount": 1,
+    "activeTimeMinutes": 0,
+    "practiceMinutes": 0,
+    "assessmentMinutes": 0,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 0,
+    "dsaSolvedCount": 0,
+    "assessmentStatus": "Not Started",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [],
+    "isEmailVerified": true,
+    "updatedAt": "2026-10-20T14:18:29.285Z"
   }
 }

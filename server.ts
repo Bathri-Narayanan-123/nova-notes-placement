@@ -50,6 +50,9 @@ const DSA_PROGRESS_FILE = path.join(DATA_DIR, 'dsa_progress.json');
 const ATTEMPTS_FILE = path.join(DATA_DIR, 'attempts.json');
 const INTERVIEWS_FILE = path.join(DATA_DIR, 'interviews.json');
 const SYSTEM_CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const ASSIGNMENTS_FILE = path.join(DATA_DIR, 'assignments.json');
+const AUDIT_LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
+const VERIFICATION_FILE = path.join(DATA_DIR, 'verification_codes.json');
 
 const DEFAULT_CONFIG = {
   assessmentTimeMinutes: 30,
@@ -59,6 +62,27 @@ const DEFAULT_CONFIG = {
 
 function getSystemConfig() {
   return loadJsonFile(SYSTEM_CONFIG_FILE, DEFAULT_CONFIG);
+}
+
+// Generate secure 6-digit numeric OTP
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function logAuditAction(action: string, performedBy: string, details: any) {
+  try {
+    const logs = loadJsonFile<any[]>(AUDIT_LOGS_FILE, []);
+    logs.unshift({
+      id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      action,
+      performedBy,
+      details,
+      timestamp: new Date().toISOString(),
+    });
+    // Keep last 500 audit entries
+    if (logs.length > 500) logs.pop();
+    saveJsonFile(AUDIT_LOGS_FILE, logs);
+  } catch {}
 }
 
 function calculateBackendReadinessScore(
@@ -249,7 +273,7 @@ function isValidEmail(email: string): boolean {
   return true;
 }
 
-// 1. SIGNUP ENDPOINT
+// 1. SIGNUP ENDPOINT (Requires Email Verification OTP)
 app.post('/api/auth/signup', (req, res) => {
   try {
     const { fullName, email, password, confirmPassword, college } = req.body;
@@ -279,39 +303,108 @@ app.post('/api/auth/signup', (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = fullName.trim();
     const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
-    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
 
     if (users[cleanEmail]) {
       return res.status(409).json({ error: 'An account with this email address already exists. Please log in instead.' });
     }
 
+    // Generate 6-digit OTP code for email verification
+    const otp = generateOtp();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    
     const salt = crypto.randomBytes(16).toString('hex');
     const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const role = cleanEmail === (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase() ? 'admin' : 'student';
 
-    const newUser = {
-      id: userId,
+    verificationMap[cleanEmail] = {
+      code: otp,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      type: 'signup',
+      lastSentAt: Date.now(),
+      pendingUser: {
+        id: userId,
+        email: cleanEmail,
+        fullName: cleanName,
+        role,
+        college: college ? String(college).trim() : 'Engineering Institute of Technology',
+        salt,
+        passwordHash: hashPassword(password, salt),
+        themePreference: 'light',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    console.log(`[EMAIL_VERIFICATION] 6-Digit Verification Code for ${cleanEmail}: ${otp}`);
+    logAuditAction('SIGNUP_VERIFICATION_SENT', cleanEmail, { email: cleanEmail, expiresMinutes: 10 });
+
+    res.status(200).json({
+      success: true,
+      requiresVerification: true,
       email: cleanEmail,
-      fullName: cleanName,
-      role,
-      college: college ? String(college).trim() : 'Engineering Institute of Technology',
-      salt,
-      passwordHash: hashPassword(password, salt),
-      themePreference: 'light',
-      createdAt: new Date().toISOString(),
+      message: `A 6-digit verification code has been sent to ${cleanEmail}. Please enter the code to complete registration.`,
+      // Expose code in development payload if SMTP is not configured
+      devOtpHint: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    });
+  } catch (error: any) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'An unexpected server error occurred during signup.' });
+  }
+});
+
+// 2. VERIFY EMAIL AND ACTIVATE ACCOUNT
+app.post('/api/auth/verify-email', (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and 6-digit verification code are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    const record = verificationMap[cleanEmail];
+
+    if (!record || record.type !== 'signup') {
+      return res.status(400).json({ error: 'No pending verification found for this email. Please sign up first.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      delete verificationMap[cleanEmail];
+      saveJsonFile(VERIFICATION_FILE, verificationMap);
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    if (record.code !== String(otp).trim()) {
+      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
+    }
+
+    // Code is valid! Commit user to database
+    const pendingUser = record.pendingUser;
+    delete verificationMap[cleanEmail];
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+
+    const newUser = {
+      ...pendingUser,
+      isEmailVerified: true,
       updatedAt: new Date().toISOString(),
     };
 
     const newProfile = {
-      id: userId,
+      id: pendingUser.id,
       email: cleanEmail,
-      fullName: cleanName,
-      role,
+      fullName: pendingUser.fullName,
+      role: pendingUser.role,
       selectedRole: 'Python Developer',
-      college: newUser.college,
+      college: pendingUser.college,
       themePreference: 'light',
       memberSince: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
-      placementReadiness: 25,
+      placementReadiness: 0,
       sessionsCount: 1,
       activeTimeMinutes: 0,
       practiceMinutes: 0,
@@ -322,47 +415,286 @@ app.post('/api/auth/signup', (req, res) => {
       assessmentStatus: 'Not Started',
       interviewStatus: 'locked',
       strongSkills: [],
-      needsImprovement: ['Python', 'DSA', 'OOP'],
+      needsImprovement: [],
+      isEmailVerified: true,
       updatedAt: new Date().toISOString(),
     };
 
     users[cleanEmail] = newUser;
-    profiles[userId] = newProfile;
+    profiles[pendingUser.id] = newProfile;
 
     // Initialize user-isolated storage entries
     const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
-    attemptsMap[userId] = [];
+    attemptsMap[pendingUser.id] = [];
     saveJsonFile(ATTEMPTS_FILE, attemptsMap);
 
     const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
-    interviewsMap[userId] = [];
+    interviewsMap[pendingUser.id] = [];
     saveJsonFile(INTERVIEWS_FILE, interviewsMap);
 
     const dsaMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
-    dsaMap[userId] = {};
+    dsaMap[pendingUser.id] = {};
     saveJsonFile(DSA_PROGRESS_FILE, dsaMap);
 
     saveJsonFile(USERS_FILE, users);
     saveJsonFile(PROFILES_FILE, profiles);
 
+    logAuditAction('USER_REGISTERED_VERIFIED', cleanEmail, { userId: pendingUser.id, role: pendingUser.role });
+
     res.status(201).json({
       success: true,
-      message: 'Account created successfully!',
+      message: 'Email verified and account created successfully!',
       user: {
-        id: userId,
+        id: pendingUser.id,
         email: cleanEmail,
-        fullName: cleanName,
-        role,
+        fullName: pendingUser.fullName,
+        role: pendingUser.role,
       },
       profile: newProfile,
     });
   } catch (error: any) {
-    console.error('Signup error:', error);
-    res.status(500).json({ error: 'An unexpected server error occurred during signup.' });
+    console.error('Verify email error:', error);
+    res.status(500).json({ error: 'Failed to verify email address.' });
   }
 });
 
-// 2. LOGIN ENDPOINT
+// 3. RESEND VERIFICATION OTP
+app.post('/api/auth/resend-otp', (req, res) => {
+  try {
+    const { email, type = 'signup' } = req.body;
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Valid email address is required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    const existing = verificationMap[cleanEmail];
+
+    // Rate limit: 30 seconds
+    if (existing && Date.now() - (existing.lastSentAt || 0) < 30000) {
+      const waitSec = Math.ceil((30000 - (Date.now() - existing.lastSentAt)) / 1000);
+      return res.status(429).json({ error: `Please wait ${waitSec} seconds before requesting a new code.` });
+    }
+
+    const otp = generateOtp();
+    verificationMap[cleanEmail] = {
+      ...(existing || {}),
+      code: otp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      lastSentAt: Date.now(),
+      type,
+    };
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    console.log(`[EMAIL_SERVICE] Fresh OTP Code for ${cleanEmail} (${type}): ${otp}`);
+    res.json({
+      success: true,
+      message: `A fresh 6-digit verification code has been sent to ${cleanEmail}.`,
+      devOtpHint: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to resend code.' });
+  }
+});
+
+// 4. PASSWORDLESS EMAIL OTP LOGIN REQUEST
+app.post('/api/auth/otp-login-request', (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const user = users[cleanEmail];
+
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email. Please sign up first.' });
+    }
+
+    const otp = generateOtp();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    verificationMap[cleanEmail] = {
+      code: otp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      type: 'login',
+      lastSentAt: Date.now(),
+      userId: user.id,
+    };
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    console.log(`[EMAIL_SERVICE] Login OTP Code for ${cleanEmail}: ${otp}`);
+    logAuditAction('LOGIN_OTP_REQUESTED', cleanEmail, { email: cleanEmail });
+
+    res.json({
+      success: true,
+      message: `A 6-digit login code has been sent to ${cleanEmail}.`,
+      devOtpHint: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to request login OTP.' });
+  }
+});
+
+// 5. PASSWORDLESS EMAIL OTP LOGIN VERIFY
+app.post('/api/auth/otp-login-verify', (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and 6-digit OTP code are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    const record = verificationMap[cleanEmail];
+
+    if (!record || record.type !== 'login') {
+      return res.status(400).json({ error: 'No pending login code found for this email. Please request a new code.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      delete verificationMap[cleanEmail];
+      saveJsonFile(VERIFICATION_FILE, verificationMap);
+      return res.status(400).json({ error: 'Login code has expired. Please request a new code.' });
+    }
+
+    if (record.code !== String(otp).trim()) {
+      return res.status(400).json({ error: 'Invalid login code. Please check your email and try again.' });
+    }
+
+    delete verificationMap[cleanEmail];
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const user = users[cleanEmail];
+
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    const profile = profiles[user.id] || {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      selectedRole: 'Python Developer',
+      themePreference: user.themePreference || 'light',
+    };
+
+    logAuditAction('USER_LOGGED_IN_OTP', cleanEmail, { userId: user.id, role: user.role });
+
+    res.json({
+      success: true,
+      message: 'Login successful via Email OTP',
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      profile,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to verify login OTP.' });
+  }
+});
+
+// 6. PASSWORD RESET REQUEST
+app.post('/api/auth/reset-password-request', (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    if (!users[cleanEmail]) {
+      return res.status(404).json({ error: 'No account registered with this email address.' });
+    }
+
+    const otp = generateOtp();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    verificationMap[cleanEmail] = {
+      code: otp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      type: 'reset',
+      lastSentAt: Date.now(),
+    };
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    console.log(`[EMAIL_SERVICE] Password Reset Code for ${cleanEmail}: ${otp}`);
+    logAuditAction('PASSWORD_RESET_REQUESTED', cleanEmail, { email: cleanEmail });
+
+    res.json({
+      success: true,
+      message: `A 6-digit password reset code has been sent to ${cleanEmail}.`,
+      devOtpHint: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to request password reset code.' });
+  }
+});
+
+// 7. PASSWORD RESET VERIFY & SET NEW PASSWORD
+app.post('/api/auth/reset-password-verify', (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, verification code, and new password are required.' });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const verificationMap = loadJsonFile<Record<string, any>>(VERIFICATION_FILE, {});
+    const record = verificationMap[cleanEmail];
+
+    if (!record || record.type !== 'reset') {
+      return res.status(400).json({ error: 'No password reset request found for this email.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      delete verificationMap[cleanEmail];
+      saveJsonFile(VERIFICATION_FILE, verificationMap);
+      return res.status(400).json({ error: 'Password reset code has expired. Please request a new code.' });
+    }
+
+    if (record.code !== String(otp).trim()) {
+      return res.status(400).json({ error: 'Invalid reset code. Please check your email and try again.' });
+    }
+
+    delete verificationMap[cleanEmail];
+    saveJsonFile(VERIFICATION_FILE, verificationMap);
+
+    const users = loadJsonFile<Record<string, any>>(USERS_FILE, {});
+    const user = users[cleanEmail];
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    user.salt = salt;
+    user.passwordHash = hashPassword(newPassword, salt);
+    user.updatedAt = new Date().toISOString();
+    saveJsonFile(USERS_FILE, users);
+
+    logAuditAction('PASSWORD_RESET_COMPLETED', cleanEmail, { userId: user.id });
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully! You can now log in with your new password.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to reset password.' });
+  }
+});
+
+// 8. STANDARD PASSWORD LOGIN ENDPOINT
 app.post('/api/auth/login', (req, res) => {
   try {
     const { email, password, portalTab = 'student' } = req.body;
@@ -386,22 +718,21 @@ app.post('/api/auth/login', (req, res) => {
     const user = users[cleanEmail];
     if (!user) {
       return res.status(404).json({
-        error: 'No account found with this email address. Please verify the email or create a new account via Signup.',
+        error: 'No account found with this email address. Please verify your email or sign up.',
       });
     }
 
     // Check Administrator portal authorization
     const adminEmail = (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase();
-    if (portalTab === 'admin' && cleanEmail !== adminEmail) {
+    if (portalTab === 'admin' && cleanEmail !== adminEmail && user.role !== 'admin') {
       return res.status(403).json({
-        error: `Access Denied: Only authorized email (${adminEmail}) has Administrator privileges.`,
+        error: `Access Denied: Only authorized administrator (${adminEmail}) has Administrator privileges.`,
       });
     }
 
     // Verify Password Hash
     const computedHash = hashPassword(password, user.salt);
     if (computedHash !== user.passwordHash) {
-      // Legacy fallback check for pre-seeded mock accounts if salt wasn't used
       if (user.password && user.password !== password) {
         return res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
       } else if (!user.password && computedHash !== user.passwordHash) {
@@ -419,6 +750,8 @@ app.post('/api/auth/login', (req, res) => {
       themePreference: user.themePreference || 'light',
     };
 
+    logAuditAction('USER_LOGGED_IN_PASSWORD', cleanEmail, { userId: user.id, role: user.role });
+
     res.json({
       success: true,
       message: 'Login successful',
@@ -433,6 +766,185 @@ app.post('/api/auth/login', (req, res) => {
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'An unexpected server error occurred during login.' });
+  }
+});
+
+// ==================== PLACEMENT STAFF & INSTITUTIONAL PORTAL API ====================
+
+// Middleware helper to ensure staff or admin authorization
+function verifyStaffOrAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const userRole = req.headers['x-user-role'] as string;
+  const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
+  const adminEmail = (process.env.ADMIN_EMAIL || 'bathrinarayanan53@gmail.com').toLowerCase();
+
+  if (userRole === 'staff' || userRole === 'admin' || userEmail === adminEmail) {
+    return next();
+  }
+
+  return res.status(403).json({
+    error: 'Access Denied: Placement Staff or Administrator privileges are required to access this institutional endpoint.',
+  });
+}
+
+// Get Students Roster for Placement Staff
+app.get('/api/staff/students', verifyStaffOrAdmin, (req, res) => {
+  try {
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+
+    const studentList = Object.values(profiles).map((p: any) => {
+      const userAttempts = attemptsMap[p.id] || [];
+      const userInterviews = interviewsMap[p.id] || [];
+      const latestAttempt = userAttempts[0] || null;
+
+      return {
+        id: p.id,
+        fullName: p.fullName || 'Unknown Student',
+        email: p.email,
+        college: p.college || 'Engineering Institute of Technology',
+        selectedRole: p.selectedRole || 'Python Developer',
+        role: p.role || 'student',
+        placementReadiness: p.placementReadiness || 0,
+        assessmentStatus: p.assessmentStatus || 'Not Started',
+        interviewStatus: p.interviewStatus || 'locked',
+        attemptsCount: userAttempts.length,
+        latestScore: latestAttempt ? latestAttempt.score : null,
+        latestAttemptDate: latestAttempt ? (latestAttempt.date || latestAttempt.timestamp) : null,
+        isQualified: latestAttempt ? !!latestAttempt.isQualified : false,
+        interviewsCount: userInterviews.length,
+        dsaSolvedCount: p.dsaSolvedCount || 0,
+        memberSince: p.memberSince || 'N/A',
+      };
+    });
+
+    res.json({ success: true, students: studentList });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to retrieve students roster for placement staff.' });
+  }
+});
+
+// Get Individual Student Detailed Preparation Report for Staff
+app.get('/api/staff/student/:studentId/report', verifyStaffOrAdmin, (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+    const interviewsMap = loadJsonFile<Record<string, any[]>>(INTERVIEWS_FILE, {});
+    const dsaMap = loadJsonFile<Record<string, any>>(DSA_PROGRESS_FILE, {});
+
+    const profile = profiles[studentId];
+    if (!profile) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+
+    const attempts = attemptsMap[studentId] || [];
+    const interviews = interviewsMap[studentId] || [];
+    const dsaProgress = dsaMap[studentId] || {};
+
+    res.json({
+      success: true,
+      profile,
+      attempts,
+      interviews,
+      dsaProgress,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to generate student report.' });
+  }
+});
+
+// Assign Placement Assessment to Student or Group
+app.post('/api/staff/assign-assessment', verifyStaffOrAdmin, (req, res) => {
+  try {
+    const { title, targetRole, studentId, studentName, deadline, instructions, assignedBy } = req.body;
+
+    if (!title || !targetRole || !deadline) {
+      return res.status(400).json({ error: 'Title, target role, and deadline are required.' });
+    }
+
+    const assignments = loadJsonFile<any[]>(ASSIGNMENTS_FILE, []);
+    const newAssignment = {
+      id: `asg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: String(title).trim(),
+      targetRole: String(targetRole).trim(),
+      studentId: studentId ? String(studentId).trim() : undefined,
+      studentName: studentName ? String(studentName).trim() : 'All Students',
+      deadline: String(deadline).trim(),
+      instructions: instructions ? String(instructions).trim() : 'Complete the diagnostic placement assessment prior to campus recruitment rounds.',
+      assignedBy: assignedBy || 'Placement Office',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    };
+
+    assignments.unshift(newAssignment);
+    saveJsonFile(ASSIGNMENTS_FILE, assignments);
+
+    logAuditAction('ASSESSMENT_ASSIGNED', assignedBy || 'Staff', { assignmentId: newAssignment.id, title, studentId });
+
+    res.status(201).json({
+      success: true,
+      message: 'Assessment assigned successfully to student(s).',
+      assignment: newAssignment,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to assign assessment.' });
+  }
+});
+
+// Get Placement Assignments List
+app.get('/api/staff/assignments/:studentId?', (req, res) => {
+  try {
+    const assignments = loadJsonFile<any[]>(ASSIGNMENTS_FILE, []);
+    const studentId = req.params.studentId;
+
+    if (studentId) {
+      // Filter for specific student or broadcast assignments (studentId undefined or matching)
+      const userAssignments = assignments.filter((a) => !a.studentId || a.studentId === studentId);
+      return res.json({ success: true, assignments: userAssignments });
+    }
+
+    res.json({ success: true, assignments });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to retrieve assignments.' });
+  }
+});
+
+// Export Students Readiness Summary to CSV
+app.get('/api/staff/export-csv', verifyStaffOrAdmin, (req, res) => {
+  try {
+    const profiles = loadJsonFile<Record<string, any>>(PROFILES_FILE, {});
+    const attemptsMap = loadJsonFile<Record<string, any[]>>(ATTEMPTS_FILE, {});
+
+    const headers = ['Student ID', 'Full Name', 'Email', 'College', 'Target Role', 'Placement Readiness (%)', 'Assessment Status', 'Latest Score (%)', 'Total Attempts', 'DSA Problems Solved', 'Interview Status', 'Member Since'];
+    const rows = [headers.join(',')];
+
+    Object.values(profiles).forEach((p: any) => {
+      const userAttempts = attemptsMap[p.id] || [];
+      const latest = userAttempts[0];
+      const row = [
+        `"${p.id || ''}"`,
+        `"${p.fullName || ''}"`,
+        `"${p.email || ''}"`,
+        `"${p.college || ''}"`,
+        `"${p.selectedRole || ''}"`,
+        p.placementReadiness || 0,
+        `"${p.assessmentStatus || 'Not Started'}"`,
+        latest ? latest.score : 0,
+        userAttempts.length,
+        p.dsaSolvedCount || 0,
+        `"${p.interviewStatus || 'locked'}"`,
+        `"${p.memberSince || ''}"`,
+      ];
+      rows.push(row.join(','));
+    });
+
+    const csvContent = rows.join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="placement_readiness_report.csv"');
+    res.send(csvContent);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to generate CSV export.' });
   }
 });
 

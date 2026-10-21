@@ -254,11 +254,76 @@ class DatabaseService {
     this.listeners.forEach((fn) => fn());
   }
 
+  public getActiveUserId(): string {
+    if (typeof window === 'undefined') return 'user_178741092834';
+    try {
+      const session = localStorage.getItem('nova_notes_auth_session');
+      if (session) {
+        const parsed = JSON.parse(session);
+        if (parsed.user?.id) return parsed.user.id;
+        if (parsed.userId) return parsed.userId;
+        if (parsed.id) return parsed.id;
+        if (parsed.email) return 'usr_' + parsed.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      }
+    } catch {}
+    return 'user_178741092834';
+  }
+
+  public getUserKey(type: string): string {
+    const userId = this.getActiveUserId();
+    return `nova_notes_${userId}_${type}`;
+  }
+
+  public loginUser(userProfile: UserProfile, serverAttempts?: AssessmentAttempt[]) {
+    if (typeof window === 'undefined') return;
+    const userId = userProfile.id;
+    
+    // Store active session
+    localStorage.setItem('nova_notes_auth_session', JSON.stringify({
+      isAuthenticated: true,
+      userId,
+      email: userProfile.email,
+      role: userProfile.role,
+      user: userProfile,
+      timestamp: Date.now(),
+    }));
+
+    // Store user-scoped profile
+    const profileKey = `nova_notes_${userId}_profile`;
+    localStorage.setItem(profileKey, JSON.stringify(userProfile));
+
+    // Store user-scoped attempts
+    const attemptsKey = `nova_notes_${userId}_attempts`;
+    if (serverAttempts !== undefined) {
+      localStorage.setItem(attemptsKey, JSON.stringify(serverAttempts));
+    } else {
+      const existing = localStorage.getItem(attemptsKey);
+      if (!existing) {
+        if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+          localStorage.setItem(attemptsKey, JSON.stringify(DEFAULT_ATTEMPTS));
+        } else {
+          localStorage.setItem(attemptsKey, JSON.stringify([]));
+        }
+      }
+    }
+
+    this.notify();
+  }
+
+  public logout() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('nova_notes_auth_session');
+    this.notify();
+  }
+
   // ==================== PROFILE METHODS ====================
   public getProfile(): UserProfile {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.PROFILE);
+      const userId = this.getActiveUserId();
+      const userKey = this.getUserKey('profile');
+      const data = localStorage.getItem(userKey);
       const currentTheme = (localStorage.getItem('nova_notes_theme') as 'light' | 'dark') || 'light';
+      
       if (data) {
         const parsed = JSON.parse(data);
         if (!parsed.themePreference) {
@@ -266,7 +331,40 @@ class DatabaseService {
         }
         return parsed;
       }
-      return { ...DEFAULT_PROFILE, themePreference: currentTheme };
+
+      // Check legacy shared key for admin demo
+      if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+        const legacy = localStorage.getItem(STORAGE_KEYS.PROFILE);
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          return { ...parsed, themePreference: currentTheme };
+        }
+        return { ...DEFAULT_PROFILE, themePreference: currentTheme };
+      }
+
+      // Return clean fresh student profile for new user accounts
+      return {
+        id: userId,
+        fullName: 'Placement Candidate',
+        email: '',
+        role: 'student',
+        selectedRole: 'Python Developer',
+        college: 'Engineering Institute of Technology',
+        memberSince: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
+        placementReadiness: 0,
+        sessionsCount: 1,
+        activeTimeMinutes: 0,
+        practiceMinutes: 0,
+        assessmentMinutes: 0,
+        interviewMinutes: 0,
+        practiceQuestionsCount: 0,
+        dsaSolvedCount: 0,
+        assessmentStatus: 'Not Started',
+        interviewStatus: 'locked',
+        strongSkills: [],
+        needsImprovement: [],
+        themePreference: currentTheme,
+      };
     } catch {
       return DEFAULT_PROFILE;
     }
@@ -278,12 +376,32 @@ class DatabaseService {
     if (updates.themePreference) {
       localStorage.setItem('nova_notes_theme', updates.themePreference);
     }
-    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
+
+    // Save to user-scoped key
+    const userKey = this.getUserKey('profile');
+    localStorage.setItem(userKey, JSON.stringify(updated));
+
+    // Keep legacy key updated if admin
+    if (updated.id === 'user_178741092834' || updated.id === 'usr_admin_101') {
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
+    }
+
+    // Keep session cache updated
+    try {
+      const sessionStr = localStorage.getItem('nova_notes_auth_session');
+      if (sessionStr) {
+        const session = JSON.parse(sessionStr);
+        localStorage.setItem('nova_notes_auth_session', JSON.stringify({
+          ...session,
+          user: updated,
+        }));
+      }
+    } catch {}
 
     // Background sync to backend if user is authenticated
     if (typeof window !== 'undefined' && updated.id) {
       try {
-        fetch('/api/profile', {
+        fetch(`/api/profile/${updated.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated),
@@ -396,8 +514,15 @@ class DatabaseService {
   // ==================== ATTEMPTED QUESTIONS TRACKER ====================
   public getAttemptedQuestionIds(): string[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ATTEMPTED_QUESTION_IDS);
-      return data ? JSON.parse(data) : [];
+      const userKey = this.getUserKey('attempted_qids');
+      const data = localStorage.getItem(userKey);
+      if (data) return JSON.parse(data);
+      // Pre-seed some default attempted questions for demo user only
+      const userId = this.getActiveUserId();
+      if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+        return ['py-mcq-1', 'py-mcq-2'];
+      }
+      return [];
     } catch {
       return [];
     }
@@ -406,8 +531,9 @@ class DatabaseService {
   public markQuestionsAttempted(qids: string[]) {
     const existing = new Set(this.getAttemptedQuestionIds());
     qids.forEach((id) => existing.add(id));
+    const userKey = this.getUserKey('attempted_qids');
     localStorage.setItem(
-      STORAGE_KEYS.ATTEMPTED_QUESTION_IDS,
+      userKey,
       JSON.stringify(Array.from(existing))
     );
   }
@@ -706,10 +832,21 @@ PRINT compute(3)`,
   // ==================== ATTEMPTS METHODS ====================
   public getAttempts(): AssessmentAttempt[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ATTEMPTS);
-      return data ? JSON.parse(data) : DEFAULT_ATTEMPTS;
+      const userId = this.getActiveUserId();
+      const userKey = this.getUserKey('attempts');
+      const data = localStorage.getItem(userKey);
+      if (data) {
+        return JSON.parse(data);
+      }
+      // Demo accounts get pre-seeded attempts, all genuine accounts start with 0 attempts
+      if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+        const legacy = localStorage.getItem(STORAGE_KEYS.ATTEMPTS);
+        if (legacy) return JSON.parse(legacy);
+        return DEFAULT_ATTEMPTS;
+      }
+      return [];
     } catch {
-      return DEFAULT_ATTEMPTS;
+      return [];
     }
   }
 
@@ -718,17 +855,24 @@ PRINT compute(3)`,
   }
 
   public recordAttempt(attempt: Omit<AssessmentAttempt, 'id' | 'attemptNumber'>): AssessmentAttempt {
+    const userId = this.getActiveUserId();
+    const userKey = this.getUserKey('attempts');
     const attempts = this.getAttempts();
     const nextNumber = attempts.length > 0 ? Math.max(...attempts.map((a) => a.attemptNumber)) + 1 : 1;
 
     const newAttempt: AssessmentAttempt = {
       ...attempt,
-      id: `att-${nextNumber}`,
+      id: `att-${nextNumber}-${Date.now().toString(36)}`,
       attemptNumber: nextNumber,
+      studentId: userId,
     };
 
     attempts.unshift(newAttempt);
-    localStorage.setItem(STORAGE_KEYS.ATTEMPTS, JSON.stringify(attempts));
+    localStorage.setItem(userKey, JSON.stringify(attempts));
+
+    if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+      localStorage.setItem(STORAGE_KEYS.ATTEMPTS, JSON.stringify(attempts));
+    }
 
     // Mark questions as attempted to guarantee different questions on next attempt
     if (newAttempt.questions && newAttempt.questions.length > 0) {
@@ -754,6 +898,20 @@ PRINT compute(3)`,
       needsImprovement: weakTopics.length > 0 ? weakTopics : profile.needsImprovement,
       strongSkills: strongTopics.length > 0 ? strongTopics : profile.strongSkills,
     });
+
+    // Background sync to backend API
+    if (typeof window !== 'undefined' && userId && userId !== 'guest') {
+      try {
+        fetch('/api/assessment/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            attempt: newAttempt,
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
 
     this.notify();
     return newAttempt;
@@ -835,7 +993,8 @@ PRINT compute(3)`,
   // ==================== PRACTICE SESSIONS ====================
   public getPracticeSessions(): PracticeSession[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.PRACTICE);
+      const userKey = this.getUserKey('practice');
+      const data = localStorage.getItem(userKey);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -849,7 +1008,8 @@ PRINT compute(3)`,
       id: `prac-${Date.now()}`,
     };
     all.unshift(newSession);
-    localStorage.setItem(STORAGE_KEYS.PRACTICE, JSON.stringify(all));
+    const userKey = this.getUserKey('practice');
+    localStorage.setItem(userKey, JSON.stringify(all));
 
     // Update profile practice count
     const profile = this.getProfile();
@@ -872,7 +1032,8 @@ PRINT compute(3)`,
   // ==================== INTERVIEW SESSIONS ====================
   public getInterviews(): InterviewAttempt[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.INTERVIEWS);
+      const userKey = this.getUserKey('interviews');
+      const data = localStorage.getItem(userKey);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -886,7 +1047,8 @@ PRINT compute(3)`,
       id: `int-${Date.now()}`,
     };
     all.unshift(newInterview);
-    localStorage.setItem(STORAGE_KEYS.INTERVIEWS, JSON.stringify(all));
+    const userKey = this.getUserKey('interviews');
+    localStorage.setItem(userKey, JSON.stringify(all));
 
     const profile = this.getProfile();
     const interviewScore = newInterview.evaluation?.overallScore || 75;
@@ -949,7 +1111,8 @@ PRINT compute(3)`,
 
   public getDsaProgress(): Record<string, DsaUserProgress> {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.DSA_PROGRESS);
+      const userKey = this.getUserKey('dsa_progress');
+      const data = localStorage.getItem(userKey);
       return data ? JSON.parse(data) : {};
     } catch {
       return {};
@@ -980,7 +1143,8 @@ PRINT compute(3)`,
     };
 
     progressMap[problemId] = updated;
-    localStorage.setItem(STORAGE_KEYS.DSA_PROGRESS, JSON.stringify(progressMap));
+    const userKey = this.getUserKey('dsa_progress');
+    localStorage.setItem(userKey, JSON.stringify(progressMap));
 
     // Update solved count in user profile
     const solvedCount = Object.values(progressMap).filter((p) => p.status === 'Solved').length;

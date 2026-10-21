@@ -102,16 +102,10 @@ function AppContent() {
   }, []);
 
   const handleLoginSuccess = (userProfile: UserProfile, targetRole: 'student' | 'admin') => {
+    db.loginUser(userProfile);
     setProfile(userProfile);
+    setAttempts(db.getAttempts());
     setIsAuthenticated(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nova_notes_auth_session', JSON.stringify({
-        isAuthenticated: true,
-        email: userProfile.email,
-        role: targetRole,
-        timestamp: Date.now()
-      }));
-    }
     if (targetRole === 'admin' || userProfile.role === 'admin') {
       setIsAdminPath(true);
       if (typeof window !== 'undefined') {
@@ -124,17 +118,11 @@ function AppContent() {
   };
 
   const handleAdminLoginSuccess = (userProfile: UserProfile) => {
+    db.loginUser(userProfile);
     setProfile(userProfile);
+    setAttempts(db.getAttempts());
     setIsAuthenticated(true);
     setIsAdminPath(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nova_notes_auth_session', JSON.stringify({
-        isAuthenticated: true,
-        email: userProfile.email,
-        role: 'admin',
-        timestamp: Date.now()
-      }));
-    }
   };
 
   const handleReturnToStudent = () => {
@@ -155,11 +143,10 @@ function AppContent() {
   };
 
   const handleLogout = () => {
+    db.logout();
     setIsAuthenticated(false);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('nova_notes_auth_session');
-    }
-    db.updateProfile({ role: 'student' });
+    setProfile(db.getProfile());
+    setAttempts([]);
     setActiveTab('dashboard');
     if (typeof window !== 'undefined') {
       if (window.location.pathname.startsWith('/admin')) {
