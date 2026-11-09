@@ -10,6 +10,12 @@ import {
 import { INITIAL_QUESTION_BANK } from '../data/questionBank';
 import { PLACEMENT_ROLES } from '../data/roles';
 import { INITIAL_5_DSA_PROBLEMS, DsaProblemItem, DsaUserProgress } from '../data/dsaStarterBank';
+import { 
+  isSupabaseConfigured, 
+  syncProfileToSupabase, 
+  syncAttemptToSupabase, 
+  syncInterviewToSupabase 
+} from './supabase';
 
 const STORAGE_KEYS = {
   PROFILE: 'nova_notes_profile',
@@ -406,6 +412,11 @@ class DatabaseService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated),
         }).catch(() => {});
+
+        // Direct Cloud PostgreSQL Sync when Supabase is configured
+        if (isSupabaseConfigured) {
+          syncProfileToSupabase(updated).catch(() => {});
+        }
       } catch {}
     }
 
@@ -899,7 +910,7 @@ PRINT compute(3)`,
       strongSkills: strongTopics.length > 0 ? strongTopics : profile.strongSkills,
     });
 
-    // Background sync to backend API
+    // Background sync to backend API and Supabase
     if (typeof window !== 'undefined' && userId && userId !== 'guest') {
       try {
         fetch('/api/assessment/submit', {
@@ -910,6 +921,11 @@ PRINT compute(3)`,
             attempt: newAttempt,
           }),
         }).catch(() => {});
+
+        // Direct Cloud PostgreSQL Sync when Supabase is configured
+        if (isSupabaseConfigured) {
+          syncAttemptToSupabase(newAttempt).catch(() => {});
+        }
       } catch {}
     }
 
@@ -986,7 +1002,7 @@ PRINT compute(3)`,
         interview: '22%',
       },
       missingRequirements,
-      modelStatus: 'Active Multi-Feature Logistic Regressor',
+      modelStatus: 'Active Multi-Attribute Placement Scoring Index',
     };
   }
 
@@ -1065,7 +1081,7 @@ PRINT compute(3)`,
 
     this.notify();
 
-    // Persist to backend interview storage
+    // Persist to backend interview storage and Supabase PostgreSQL
     if (typeof window !== 'undefined') {
       try {
         fetch('/api/ai/interview/save', {
@@ -1081,6 +1097,11 @@ PRINT compute(3)`,
             isDirectTest: newInterview.isDirectTest,
           }),
         }).catch(() => {});
+
+        // Direct Cloud PostgreSQL Sync when Supabase is configured
+        if (isSupabaseConfigured) {
+          syncInterviewToSupabase(newInterview).catch(() => {});
+        }
       } catch {}
     }
 

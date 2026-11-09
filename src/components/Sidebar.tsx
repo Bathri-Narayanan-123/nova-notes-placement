@@ -14,10 +14,12 @@ import {
   Laptop, 
   LogOut,
   Sparkles,
-  BookOpen
+  BookOpen,
+  Database
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { isSupabaseConfigured } from '../services/supabase';
 
 export type NavTab = 
   | 'dashboard' 
@@ -34,6 +36,7 @@ interface SidebarProps {
   setActiveTab: (tab: NavTab) => void;
   profile: UserProfile;
   onLogout: () => void;
+  onOpenSetupGuide?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -41,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   profile,
   onLogout,
+  onOpenSetupGuide,
 }) => {
   const { theme, setTheme } = useTheme();
 
@@ -159,6 +163,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Database Status & Health Monitor Button */}
+        {onOpenSetupGuide && (
+          <button
+            id="sidebar-db-status-btn"
+            onClick={onOpenSetupGuide}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-900/60 hover:bg-slate-200/80 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200/60 dark:border-slate-800 font-medium"
+            title="Inspect Database Status & Supabase Connection"
+          >
+            <div className="flex items-center gap-2">
+              <Database className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span>Database Status</span>
+            </div>
+            <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+          </button>
+        )}
 
         {/* Logout Button */}
         <button

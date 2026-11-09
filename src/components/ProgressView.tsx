@@ -211,9 +211,9 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ profile, attempts })
               <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">ML Placement Probability Model</h2>
+              <h2 className="text-lg font-bold">Placement Readiness Index &amp; Evaluation Model</h2>
               <p className="text-xs text-indigo-200/80">
-                Multi-Feature Logistic Regressor &bull; Status: <span className="text-emerald-400 font-semibold">{prediction.modelStatus}</span>
+                Multi-Attribute Candidate Readiness Metric &bull; Status: <span className="text-emerald-400 font-semibold">{prediction.modelStatus}</span>
               </p>
             </div>
           </div>

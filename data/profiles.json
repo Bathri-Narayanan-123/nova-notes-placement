@@ -104,5 +104,29 @@
     "needsImprovement": [],
     "isEmailVerified": true,
     "updatedAt": "2026-10-20T14:18:29.285Z"
+  },
+  "usr_1794207852937_3h8it": {
+    "id": "usr_1794207852937_3h8it",
+    "email": "student_1794207852933@example.com",
+    "fullName": "Alice Candidate",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "Engineering Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "11/9/2026",
+    "placementReadiness": 0,
+    "sessionsCount": 1,
+    "activeTimeMinutes": 0,
+    "practiceMinutes": 0,
+    "assessmentMinutes": 0,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 0,
+    "dsaSolvedCount": 0,
+    "assessmentStatus": "Not Started",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [],
+    "isEmailVerified": true,
+    "updatedAt": "2026-11-09T07:04:13.056Z"
   }
 }

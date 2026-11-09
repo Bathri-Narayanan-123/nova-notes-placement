@@ -227,6 +227,7 @@ function AppContent() {
           setActiveTab={setActiveTab}
           profile={profile}
           onLogout={handleLogout}
+          onOpenSetupGuide={() => setShowSetupGuide(true)}
         />
       </div>
 
@@ -248,6 +249,10 @@ function AppContent() {
               onLogout={() => {
                 setMobileMenuOpen(false);
                 handleLogout();
+              }}
+              onOpenSetupGuide={() => {
+                setMobileMenuOpen(false);
+                setShowSetupGuide(true);
               }}
             />
           </div>

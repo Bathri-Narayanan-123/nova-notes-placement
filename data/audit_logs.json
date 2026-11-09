@@ -1,5 +1,64 @@
 [
   {
+    "id": "audit_1794207853273_mw9n",
+    "action": "USER_LOGGED_IN_OTP",
+    "performedBy": "student_1794207852933@example.com",
+    "details": {
+      "userId": "usr_1794207852937_3h8it",
+      "role": "student"
+    },
+    "timestamp": "2026-11-09T07:04:13.273Z"
+  },
+  {
+    "id": "audit_1794207853266_gsim",
+    "action": "LOGIN_OTP_REQUESTED",
+    "performedBy": "student_1794207852933@example.com",
+    "details": {
+      "email": "student_1794207852933@example.com"
+    },
+    "timestamp": "2026-11-09T07:04:13.266Z"
+  },
+  {
+    "id": "audit_1794207853174_jxq1",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "student_1794207852933@example.com",
+    "details": {
+      "userId": "usr_1794207852937_3h8it",
+      "role": "student"
+    },
+    "timestamp": "2026-11-09T07:04:13.174Z"
+  },
+  {
+    "id": "audit_1794207853057_fhe8",
+    "action": "USER_REGISTERED_VERIFIED",
+    "performedBy": "student_1794207852933@example.com",
+    "details": {
+      "userId": "usr_1794207852937_3h8it",
+      "role": "student"
+    },
+    "timestamp": "2026-11-09T07:04:13.057Z"
+  },
+  {
+    "id": "audit_1794207853015_ap42",
+    "action": "SIGNUP_VERIFICATION_SENT",
+    "performedBy": "student_1794207852933@example.com",
+    "details": {
+      "email": "student_1794207852933@example.com",
+      "expiresMinutes": 10
+    },
+    "timestamp": "2026-11-09T07:04:13.015Z"
+  },
+  {
+    "id": "audit_1794207689920_vnn9",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "bathrinarayanan53@gmail.com",
+    "details": {
+      "userId": "usr_admin_101",
+      "role": "admin"
+    },
+    "timestamp": "2026-11-09T07:01:29.920Z"
+  },
+  {
     "id": "audit_1792505909392_z3jc",
     "action": "USER_LOGGED_IN_PASSWORD",
     "performedBy": "candidate_1792505908984@university.edu",

@@ -47,5 +47,18 @@
     "createdAt": "2026-10-20T14:18:29.240Z",
     "updatedAt": "2026-10-20T14:18:29.264Z",
     "isEmailVerified": true
+  },
+  "student_1794207852933@example.com": {
+    "id": "usr_1794207852937_3h8it",
+    "email": "student_1794207852933@example.com",
+    "fullName": "Alice Candidate",
+    "role": "student",
+    "college": "Engineering Institute of Technology",
+    "salt": "06c95521172da83bdee21e0c0982c63d",
+    "passwordHash": "5be5b5688e7ffc71d2753ddd5cd70045fd1a8af0156980dd25786cff73d97fe419977fbdda5f334c0f2194c074ce28f7e904cd62bfdce5b7d15fd6f37294acc3",
+    "themePreference": "light",
+    "createdAt": "2026-11-09T07:04:13.015Z",
+    "updatedAt": "2026-11-09T07:04:13.039Z",
+    "isEmailVerified": true
   }
 }

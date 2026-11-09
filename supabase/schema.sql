@@ -319,3 +319,74 @@ CREATE TRIGGER on_auth_user_created
 -- 6. PROMOTION SCRIPT FOR THE PROJECT OWNER (Single Admin Mandate)
 -- UPDATE public.profiles SET role = 'admin' WHERE email = 'bathrinarayanan53@gmail.com';
 -- ==============================================================================
+
+-- ==============================================================================
+-- 7. THE 15 REQUIRED CANONICAL ENTITIES & VIEWS
+-- 1. users (auth.users)
+-- 2. student_profiles (public.profiles)
+-- 3. user_roles (public.user_roles)
+-- 4. placement_roles (public.roles)
+-- 5. practice_questions (public.questions)
+-- 6. assessment_questions (public.assessment_questions)
+-- 7. assessment_attempts (public.assessment_attempts)
+-- 8. student_answers (public.assessment_answers)
+-- 9. topic_performance (public.skill_performance)
+-- 10. adaptive_practice (public.adaptive_practice)
+-- 11. interview_sessions (public.interviews)
+-- 12. interview_responses (public.interview_answers)
+-- 13. interview_feedback (public.interview_evaluations)
+-- 14. student_activity (public.student_activity)
+-- 15. placement_readiness (public.readiness_scores)
+-- ==============================================================================
+
+CREATE OR REPLACE VIEW public.student_profiles AS SELECT * FROM public.profiles;
+CREATE OR REPLACE VIEW public.placement_roles AS SELECT * FROM public.roles;
+CREATE OR REPLACE VIEW public.practice_questions AS SELECT * FROM public.questions;
+CREATE OR REPLACE VIEW public.student_answers AS SELECT * FROM public.assessment_answers;
+CREATE OR REPLACE VIEW public.topic_performance AS SELECT * FROM public.skill_performance;
+CREATE OR REPLACE VIEW public.interview_sessions AS SELECT * FROM public.interviews;
+CREATE OR REPLACE VIEW public.interview_responses AS SELECT * FROM public.interview_answers;
+CREATE OR REPLACE VIEW public.interview_feedback AS SELECT * FROM public.interview_evaluations;
+CREATE OR REPLACE VIEW public.placement_readiness AS SELECT * FROM public.readiness_scores;
+
+CREATE TABLE IF NOT EXISTS public.user_roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    role user_role DEFAULT 'student'::user_role NOT NULL,
+    granted_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(user_id, role)
+);
+
+CREATE TABLE IF NOT EXISTS public.adaptive_practice (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    attempt_id UUID REFERENCES public.assessment_attempts(id) ON DELETE SET NULL,
+    role_title TEXT NOT NULL,
+    weak_topics TEXT[] NOT NULL,
+    status TEXT DEFAULT 'pending' NOT NULL,
+    improvement_score INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.student_activity (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    activity_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.adaptive_practice ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_activity ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "User roles view" ON public.user_roles;
+CREATE POLICY "User roles view" ON public.user_roles FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Adaptive practice view" ON public.adaptive_practice;
+CREATE POLICY "Adaptive practice view" ON public.adaptive_practice FOR ALL USING (auth.uid() = student_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Student activity view" ON public.student_activity;
+CREATE POLICY "Student activity view" ON public.student_activity FOR ALL USING (auth.uid() = student_id OR public.is_admin());
+
