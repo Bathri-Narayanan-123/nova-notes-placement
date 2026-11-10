@@ -101,10 +101,41 @@ function AppContent() {
     return unsubscribe;
   }, []);
 
-  const handleLoginSuccess = (userProfile: UserProfile, targetRole: 'student' | 'admin') => {
-    db.loginUser(userProfile);
+  // Restore user session and data from backend on mount/refresh
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const sessionStr = localStorage.getItem('nova_notes_auth_session');
+      if (sessionStr) {
+        const session = JSON.parse(sessionStr);
+        if (session.isAuthenticated && session.userId) {
+          fetch(`/api/profile/${session.userId}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.profile) {
+                setProfile(data.profile);
+              }
+            })
+            .catch(() => {});
+
+          fetch(`/api/assessment/attempts/${session.userId}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((attData) => {
+              if (attData?.attempts && Array.isArray(attData.attempts)) {
+                db.saveAttemptsForUser(session.userId, attData.attempts);
+                setAttempts(attData.attempts);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleLoginSuccess = (userProfile: UserProfile, targetRole: 'student' | 'admin', attemptsData?: AssessmentAttempt[]) => {
+    db.loginUser(userProfile, attemptsData);
     setProfile(userProfile);
-    setAttempts(db.getAttempts());
+    setAttempts(attemptsData !== undefined ? attemptsData : db.getAttempts());
     setIsAuthenticated(true);
     if (targetRole === 'admin' || userProfile.role === 'admin') {
       setIsAdminPath(true);

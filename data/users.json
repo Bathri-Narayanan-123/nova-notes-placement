@@ -16,8 +16,8 @@
     "email": "student.candidate@novanotes.edu",
     "fullName": "Placement Candidate",
     "role": "student",
-    "salt": "0fdfaaf28bc5d76be06bd6aa5dc6628f",
-    "passwordHash": "660565f7d5ff6b6b5675e71aba85c32db9f858a61d9ba1412a1d69c90a9bbf4f7d6a46f5577145adf12fc6ab22c764537b0d023596c6bfbb3b9ba929078959f1",
+    "salt": "6ce1ec449329b61ac075e65c84be0ff8",
+    "passwordHash": "2f218804a996f87f433402889b3cde0fb240a913ca47c71093584dd5fdd6c2fa01ce3bfad039a9e6005c00e2b43a1c5a62e20bf9bac17711b70a4dd881147588",
     "college": "Engineering Institute of Technology",
     "themePreference": "light",
     "createdAt": "2026-10-07T04:32:14.845Z",
@@ -59,6 +59,32 @@
     "themePreference": "light",
     "createdAt": "2026-11-09T07:04:13.015Z",
     "updatedAt": "2026-11-09T07:04:13.039Z",
+    "isEmailVerified": true
+  },
+  "test.student.1794323198049@example.com": {
+    "id": "usr_1794323198051_pu953",
+    "email": "test.student.1794323198049@example.com",
+    "fullName": "Aarav Sharma",
+    "role": "student",
+    "college": "National Institute of Technology",
+    "salt": "d2e4b4913dc07d5808851f0a51e34929",
+    "passwordHash": "ece2a1cab79424e486a061f9053295e770cb9b2d128fb807bf310a667c704a0c6a9f2367311a3824c77af2cf5bfdc3e11ab38224f488a4be8f46ad573fb43cfa",
+    "themePreference": "light",
+    "createdAt": "2026-11-10T15:06:38.125Z",
+    "updatedAt": "2026-11-10T15:06:38.129Z",
+    "isEmailVerified": true
+  },
+  "test.student.1794323223006@example.com": {
+    "id": "usr_1794323223008_jp9kj",
+    "email": "test.student.1794323223006@example.com",
+    "fullName": "Aarav Sharma",
+    "role": "student",
+    "college": "National Institute of Technology",
+    "salt": "c0741a990b6ebab91277735867323b93",
+    "passwordHash": "a83e45fbe58be58d30fe31beea569628643dae978e44be4ef74a3b816810d7ec03defde311e3393159c4b9597d65d8552f4a5a0ea470a073e6076d08b9fac3d7",
+    "themePreference": "light",
+    "createdAt": "2026-11-10T15:07:03.094Z",
+    "updatedAt": "2026-11-10T15:07:03.098Z",
     "isEmailVerified": true
   }
 }

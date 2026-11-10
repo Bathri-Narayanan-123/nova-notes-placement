@@ -54,5 +54,62 @@
     }
   ],
   "usr_1792505909158_13ry6": [],
-  "usr_1794207852937_3h8it": []
+  "usr_1794207852937_3h8it": [],
+  "usr_student_102": [
+    {
+      "id": "att_std_102_1",
+      "attemptNumber": 1,
+      "studentId": "usr_student_102",
+      "role": "Python Developer",
+      "date": "10/15/2026",
+      "score": 78,
+      "isQualified": true,
+      "mcqScore": 80,
+      "aptitudeScore": 75,
+      "pseudoScore": 80,
+      "codingScore": 75,
+      "totalQuestions": 39,
+      "correctCount": 30,
+      "durationMinutes": 26,
+      "questions": [],
+      "answers": {},
+      "topicBreakdown": {
+        "Python": {
+          "total": 10,
+          "correct": 8,
+          "percentage": 80
+        },
+        "DSA": {
+          "total": 8,
+          "correct": 6,
+          "percentage": 75
+        },
+        "Aptitude": {
+          "total": 10,
+          "correct": 8,
+          "percentage": 80
+        },
+        "Pseudocode": {
+          "total": 7,
+          "correct": 5,
+          "percentage": 71
+        },
+        "Coding": {
+          "total": 4,
+          "correct": 3,
+          "percentage": 75
+        }
+      },
+      "weakTopics": [
+        "Pseudocode Tracing"
+      ],
+      "strongTopics": [
+        "Python Fundamentals",
+        "Aptitude Reasoning"
+      ],
+      "isAdaptive": false
+    }
+  ],
+  "usr_1794323198051_pu953": [],
+  "usr_1794323223008_jp9kj": []
 }

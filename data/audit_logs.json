@@ -1,5 +1,132 @@
 [
   {
+    "id": "audit_1794323223103_eg6p",
+    "action": "USER_LOGGED_IN_OTP",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:07:03.103Z"
+  },
+  {
+    "id": "audit_1794323223101_uqxp",
+    "action": "LOGIN_OTP_REQUESTED",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "email": "student.candidate@novanotes.edu"
+    },
+    "timestamp": "2026-11-10T15:07:03.101Z"
+  },
+  {
+    "id": "audit_1794323223099_dolu",
+    "action": "USER_REGISTERED_VERIFIED",
+    "performedBy": "test.student.1794323223006@example.com",
+    "details": {
+      "userId": "usr_1794323223008_jp9kj",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:07:03.099Z"
+  },
+  {
+    "id": "audit_1794323223095_kst3",
+    "action": "SIGNUP_VERIFICATION_SENT",
+    "performedBy": "test.student.1794323223006@example.com",
+    "details": {
+      "email": "test.student.1794323223006@example.com",
+      "expiresMinutes": 10
+    },
+    "timestamp": "2026-11-10T15:07:03.095Z"
+  },
+  {
+    "id": "audit_1794323222913_3n0y",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:07:02.913Z"
+  },
+  {
+    "id": "audit_1794323198148_itrn",
+    "action": "USER_LOGGED_IN_OTP",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:06:38.148Z"
+  },
+  {
+    "id": "audit_1794323198146_0k3q",
+    "action": "LOGIN_OTP_REQUESTED",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "email": "student.candidate@novanotes.edu"
+    },
+    "timestamp": "2026-11-10T15:06:38.146Z"
+  },
+  {
+    "id": "audit_1794323198143_0jmh",
+    "action": "USER_REGISTERED_VERIFIED",
+    "performedBy": "test.student.1794323198049@example.com",
+    "details": {
+      "userId": "usr_1794323198051_pu953",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:06:38.143Z"
+  },
+  {
+    "id": "audit_1794323198125_i68e",
+    "action": "SIGNUP_VERIFICATION_SENT",
+    "performedBy": "test.student.1794323198049@example.com",
+    "details": {
+      "email": "test.student.1794323198049@example.com",
+      "expiresMinutes": 10
+    },
+    "timestamp": "2026-11-10T15:06:38.126Z"
+  },
+  {
+    "id": "audit_1794323197959_bkgi",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T15:06:37.959Z"
+  },
+  {
+    "id": "audit_1794322558322_o4pd",
+    "action": "USER_LOGGED_IN_PASSWORD",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T14:55:58.322Z"
+  },
+  {
+    "id": "audit_1794322467938_h2t1",
+    "action": "USER_LOGGED_IN_OTP",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "userId": "usr_student_102",
+      "role": "student"
+    },
+    "timestamp": "2026-11-10T14:54:27.938Z"
+  },
+  {
+    "id": "audit_1794322467933_4emr",
+    "action": "LOGIN_OTP_REQUESTED",
+    "performedBy": "student.candidate@novanotes.edu",
+    "details": {
+      "email": "student.candidate@novanotes.edu"
+    },
+    "timestamp": "2026-11-10T14:54:27.933Z"
+  },
+  {
     "id": "audit_1794207853273_mw9n",
     "action": "USER_LOGGED_IN_OTP",
     "performedBy": "student_1794207852933@example.com",

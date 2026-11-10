@@ -865,6 +865,16 @@ PRINT compute(3)`,
     return this.getAttempts().find((a) => a.id === id);
   }
 
+  public saveAttemptsForUser(userId: string, attempts: AssessmentAttempt[]) {
+    if (typeof window === 'undefined') return;
+    const userKey = `nova_notes_${userId}_attempts`;
+    localStorage.setItem(userKey, JSON.stringify(attempts));
+    if (userId === 'user_178741092834' || userId === 'usr_admin_101') {
+      localStorage.setItem(STORAGE_KEYS.ATTEMPTS, JSON.stringify(attempts));
+    }
+    this.notify();
+  }
+
   public recordAttempt(attempt: Omit<AssessmentAttempt, 'id' | 'attemptNumber'>): AssessmentAttempt {
     const userId = this.getActiveUserId();
     const userKey = this.getUserKey('attempts');

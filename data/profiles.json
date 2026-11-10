@@ -36,23 +36,24 @@
     "college": "Engineering Institute of Technology",
     "themePreference": "light",
     "memberSince": "9/01/2026",
-    "placementReadiness": 32,
+    "placementReadiness": 65,
     "sessionsCount": 12,
     "activeTimeMinutes": 15,
     "practiceMinutes": 20,
     "assessmentMinutes": 30,
     "interviewMinutes": 0,
     "practiceQuestionsCount": 25,
-    "assessmentStatus": "2% In Progress",
+    "assessmentStatus": "Qualified (78%)",
     "interviewStatus": "locked",
-    "strongSkills": [],
-    "needsImprovement": [
-      "Python",
-      "OOP",
-      "DSA",
-      "SQL"
+    "strongSkills": [
+      "Python Fundamentals",
+      "Aptitude Reasoning"
     ],
-    "updatedAt": "2026-10-07T04:32:14.845Z"
+    "needsImprovement": [
+      "Pseudocode Tracing"
+    ],
+    "updatedAt": "2026-10-07T04:32:14.845Z",
+    "latestScore": 78
   },
   "usr_1791347559186_nxn68": {
     "id": "usr_1791347559186_nxn68",
@@ -128,5 +129,53 @@
     "needsImprovement": [],
     "isEmailVerified": true,
     "updatedAt": "2026-11-09T07:04:13.056Z"
+  },
+  "usr_1794323198051_pu953": {
+    "id": "usr_1794323198051_pu953",
+    "email": "test.student.1794323198049@example.com",
+    "fullName": "Aarav Sharma",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "National Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "11/10/2026",
+    "placementReadiness": 0,
+    "sessionsCount": 1,
+    "activeTimeMinutes": 0,
+    "practiceMinutes": 0,
+    "assessmentMinutes": 0,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 0,
+    "dsaSolvedCount": 0,
+    "assessmentStatus": "Not Started",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [],
+    "isEmailVerified": true,
+    "updatedAt": "2026-11-10T15:06:38.142Z"
+  },
+  "usr_1794323223008_jp9kj": {
+    "id": "usr_1794323223008_jp9kj",
+    "email": "test.student.1794323223006@example.com",
+    "fullName": "Aarav Sharma",
+    "role": "student",
+    "selectedRole": "Python Developer",
+    "college": "National Institute of Technology",
+    "themePreference": "light",
+    "memberSince": "11/10/2026",
+    "placementReadiness": 0,
+    "sessionsCount": 1,
+    "activeTimeMinutes": 0,
+    "practiceMinutes": 0,
+    "assessmentMinutes": 0,
+    "interviewMinutes": 0,
+    "practiceQuestionsCount": 0,
+    "dsaSolvedCount": 0,
+    "assessmentStatus": "Not Started",
+    "interviewStatus": "locked",
+    "strongSkills": [],
+    "needsImprovement": [],
+    "isEmailVerified": true,
+    "updatedAt": "2026-11-10T15:07:03.098Z"
   }
 }
